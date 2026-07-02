@@ -44,3 +44,13 @@ Pour lancer sans compiler (Python 3.10+ requis) :
 ```bash
 python chrono_app.py
 ```
+
+## ⚙️ Activer la compilation automatique (1 fois)
+
+Le token utilisé n'avait pas la permission `workflow`, le fichier de build est donc fourni
+dans `workflow-a-installer/build-windows.yml`. Pour l'activer :
+
+1. Sur GitHub, ouvrez le repo → **Add file → Create new file**.
+2. Nommez le fichier : `.github/workflows/build-windows.yml`
+3. Collez-y le contenu de `workflow-a-installer/build-windows.yml` et validez (**Commit**).
+4. L'onglet **Actions** compilera `ChronoApp.exe` et le publiera dans **Releases** en ~3 minutes.
