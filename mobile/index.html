@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#12151C" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="apple-touch-icon" href="icon-192.png" />
+<title>ChronoApp</title>
+<style>
+  :root{
+    --bg:#12151C; --surface:#1C212B; --surface2:#242B37; --line:#2E3644;
+    --text:#E8EAED; --muted:#8A93A3; --teal:#3DD6C4; --amber:#F5A623; --red:#E5484D;
+    --radius:14px;
+    --safe-t:env(safe-area-inset-top,0px); --safe-b:env(safe-area-inset-bottom,0px);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+  body{padding-bottom:calc(84px + var(--safe-b));min-height:100vh}
+  .mono{font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1;
+    font-family:ui-monospace,"SF Mono","Segoe UI Mono",Menlo,Consolas,monospace;}
+
+  header{position:sticky;top:0;z-index:20;background:rgba(18,21,28,.92);
+    backdrop-filter:blur(8px);border-bottom:1px solid var(--line);
+    padding:calc(12px + var(--safe-t)) 16px 12px;}
+  .brand{display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .brand h1{font-size:19px;margin:0;letter-spacing:.14em;text-transform:uppercase;font-weight:700}
+  .brand .dot{color:var(--amber)}
+  .active-pill{font-size:12px;color:var(--muted);border:1px solid var(--line);
+    border-radius:999px;padding:5px 11px;white-space:nowrap}
+  .active-pill.live{color:var(--amber);border-color:var(--amber)}
+  .active-pill.over{color:var(--red);border-color:var(--red)}
+
+  .projects{display:flex;gap:8px;overflow-x:auto;padding:12px 16px 2px;scrollbar-width:none}
+  .projects::-webkit-scrollbar{display:none}
+  .chip{flex:0 0 auto;background:var(--surface);border:1px solid var(--line);color:var(--muted);
+    padding:9px 14px;border-radius:999px;font-size:14px;font-weight:600}
+  .chip.sel{color:var(--bg);background:var(--teal);border-color:var(--teal)}
+  .chip.add{color:var(--teal);border-style:dashed}
+
+  main{padding:8px 12px 0}
+  .tabbar{display:flex;gap:6px;padding:6px 4px 12px}
+  .tab{flex:1;text-align:center;padding:10px;border-radius:10px;font-size:14px;font-weight:600;
+    color:var(--muted);background:var(--surface);border:1px solid var(--line)}
+  .tab.sel{color:var(--text);background:var(--surface2);border-color:var(--teal)}
+
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+    margin-bottom:10px;overflow:hidden}
+  .row{display:flex;align-items:center;gap:12px;padding:13px 14px;position:relative}
+  .row.sub{padding-left:26px;background:var(--surface2)}
+  .row.sub::before{content:"";position:absolute;left:14px;top:0;bottom:0;width:2px;background:var(--line)}
+  .row.running{box-shadow:inset 3px 0 0 var(--amber)}
+  .caret{width:22px;flex:0 0 auto;color:var(--muted);font-size:12px;text-align:center;
+    transition:transform .15s}
+  .caret.open{transform:rotate(90deg)}
+  .caret.empty{opacity:.25}
+  .meta{flex:1;min-width:0}
+  .name{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .name.dim{color:var(--muted);font-weight:600}
+  .sub .name{font-size:14px}
+  .time{font-size:13px;color:var(--muted);margin-top:3px;display:flex;align-items:center;gap:6px}
+  .time .val{color:var(--text)}
+  .time .est{color:var(--muted)}
+  .over-flag{color:var(--red);font-weight:700;font-size:11px;letter-spacing:.04em}
+  .reclight{width:8px;height:8px;border-radius:50%;background:var(--amber);flex:0 0 auto;
+    box-shadow:0 0 0 0 rgba(245,166,35,.6);animation:pulse 1.6s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(245,166,35,.55)}70%{box-shadow:0 0 0 7px rgba(245,166,35,0)}100%{box-shadow:0 0 0 0 rgba(245,166,35,0)}}
+
+  .bar{height:3px;background:var(--line);border-radius:2px;margin-top:8px;overflow:hidden}
+  .bar > i{display:block;height:100%;background:var(--teal);width:0%}
+  .bar.over > i{background:var(--red)}
+
+  .play{flex:0 0 auto;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);
+    background:var(--surface2);color:var(--text);font-size:17px;display:grid;place-items:center}
+  .play.on{background:var(--amber);color:#1a1206;border-color:var(--amber)}
+  .kebab{flex:0 0 auto;width:34px;height:40px;background:none;border:none;color:var(--muted);font-size:20px}
+
+  .addline{width:100%;text-align:left;padding:12px 14px;background:none;border:none;border-top:1px dashed var(--line);
+    color:var(--teal);font-size:14px;font-weight:600}
+  .addsub{padding-left:26px}
+
+  .empty{color:var(--muted);text-align:center;padding:48px 24px;font-size:15px;line-height:1.5}
+  .empty b{color:var(--text)}
+
+  .fab{position:fixed;right:18px;bottom:calc(18px + var(--safe-b));z-index:30;
+    background:var(--teal);color:var(--bg);border:none;border-radius:16px;padding:15px 20px;
+    font-size:15px;font-weight:700;box-shadow:0 8px 24px rgba(0,0,0,.4)}
+
+  /* modal */
+  .scrim{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:40;display:none;
+    align-items:flex-end}
+  .scrim.show{display:flex}
+  .sheet{width:100%;background:var(--surface);border-top-left-radius:20px;border-top-right-radius:20px;
+    padding:20px 18px calc(20px + var(--safe-b));border-top:1px solid var(--line)}
+  .sheet h2{margin:2px 0 16px;font-size:17px}
+  .sheet label{display:block;font-size:12px;color:var(--muted);margin:12px 0 6px;text-transform:uppercase;letter-spacing:.06em}
+  .sheet input{width:100%;background:var(--surface2);border:1px solid var(--line);border-radius:10px;
+    color:var(--text);font-size:16px;padding:13px 12px}
+  .sheet .hint{font-size:12px;color:var(--muted);margin-top:6px}
+  .sheet .actions{display:flex;gap:10px;margin-top:20px}
+  .btn{flex:1;padding:14px;border-radius:12px;font-size:15px;font-weight:700;border:1px solid var(--line);
+    background:var(--surface2);color:var(--text)}
+  .btn.primary{background:var(--teal);color:var(--bg);border-color:var(--teal)}
+  .btn.danger{background:none;color:var(--red);border-color:transparent;flex:0 0 auto;padding:14px 4px}
+
+  .menu .sheet button.mi{display:block;width:100%;text-align:left;background:none;border:none;
+    color:var(--text);font-size:16px;padding:15px 4px;border-bottom:1px solid var(--line)}
+  .menu .sheet button.mi.del{color:var(--red)}
+  .menu .sheet button.mi:last-child{border-bottom:none}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <h1>Chrono<span class="dot">·</span>App</h1>
+    <div id="pill" class="active-pill">0 active</div>
+  </div>
+  <div class="projects" id="projects"></div>
+</header>
+
+<main>
+  <div class="tabbar">
+    <button class="tab sel" id="tabTasks">Tâches du projet</button>
+    <button class="tab" id="tabDash">Dashboard actives</button>
+  </div>
+  <div id="list"></div>
+</main>
+
+<button class="fab" id="fab">+ Tâche</button>
+
+<!-- Feuille édition -->
+<div class="scrim" id="editScrim">
+  <div class="sheet">
+    <h2 id="editTitle">Nouvelle tâche</h2>
+    <label>Nom</label>
+    <input id="editName" placeholder="Ex. Maquette page d'accueil" autocomplete="off" />
+    <label>Temps estimé (minutes) — 0 = aucun</label>
+    <input id="editEst" type="number" inputmode="numeric" min="0" value="60" />
+    <div class="hint">Une ligne devient rouge quand le temps passé dépasse l'estimation.</div>
+    <div class="actions">
+      <button class="btn" id="editCancel">Annuler</button>
+      <button class="btn primary" id="editSave">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Menu contextuel -->
+<div class="scrim menu" id="menuScrim">
+  <div class="sheet">
+    <h2 id="menuTitle">Options</h2>
+    <button class="mi" id="miEdit">Modifier le nom / l'estimation</button>
+    <button class="mi" id="miReset">Remettre le compteur à zéro</button>
+    <button class="mi del" id="miDelete">Supprimer</button>
+    <button class="mi" id="miClose">Fermer</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+const KEY = "chronoapp.v1";
+const uid = () => Math.random().toString(36).slice(2, 10);
+
+// ---- Données ----
+let state = load();
+let selProject = state.projects[0] ? state.projects[0].id : null;
+let view = "tasks";                 // "tasks" | "dash"
+let openTasks = {};                 // id -> bool (sous-tâches déployées)
+let edit = null;                    // contexte d'édition
+let menuCtx = null;                 // contexte du menu
+
+function load(){
+  try{
+    const s = JSON.parse(localStorage.getItem(KEY));
+    if(s && Array.isArray(s.projects)){
+      // Fige les timers en cours au chargement (comme la version PC)
+      s.projects.forEach(p => p.tasks.forEach(t => {
+        freeze(t); (t.subtasks||[]).forEach(freeze);
+      }));
+      return s;
+    }
+  }catch(e){}
+  return { projects: [] };
+}
+function freeze(n){
+  if(n.running && n.startedAt){ n.elapsed = elapsed(n); }
+  n.running = false; delete n.startedAt;
+  if(typeof n.elapsed !== "number") n.elapsed = 0;
+  if(typeof n.estimate_min !== "number") n.estimate_min = 0;
+}
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){} }
+
+// ---- Helpers timer ----
+function elapsed(n){
+  let e = n.elapsed || 0;
+  if(n.running && n.startedAt) e += (Date.now() - n.startedAt) / 1000;
+  return e;
+}
+function over(n){ return n.estimate_min > 0 && elapsed(n) > n.estimate_min * 60; }
+function hms(s){
+  s = Math.max(0, Math.floor(s));
+  const h = String(Math.floor(s/3600)).padStart(2,"0");
+  const m = String(Math.floor((s%3600)/60)).padStart(2,"0");
+  const x = String(s%60).padStart(2,"0");
+  return `${h}:${m}:${x}`;
+}
+function project(){ return state.projects.find(p => p.id === selProject) || null; }
+function findNode(id){
+  for(const p of state.projects){
+    for(const t of p.tasks){
+      if(t.id === id) return {p, parent:null, node:t};
+      for(const s of (t.subtasks||[])){ if(s.id === id) return {p, parent:t, node:s}; }
+    }
+  }
+  return null;
+}
+function allNodes(){
+  const out = [];
+  for(const p of state.projects)
+    for(const t of p.tasks){ out.push({p,parent:null,node:t});
+      for(const s of (t.subtasks||[])) out.push({p,parent:t,node:s}); }
+  return out;
+}
+
+// ---- Actions ----
+function toggle(id){
+  const f = findNode(id); if(!f) return;
+  const n = f.node;
+  if(n.running){ n.elapsed = elapsed(n); n.running = false; delete n.startedAt; }
+  else { n.running = true; n.startedAt = Date.now(); }
+  save(); render();
+}
+function addProject(){
+  edit = {kind:"project"};
+  document.getElementById("editTitle").textContent = "Nouveau projet";
+  document.getElementById("editName").value = "";
+  document.getElementById("editEst").parentNode.style.display="none";
+  document.querySelector("#editScrim .hint").style.display="none";
+  document.getElementById("editEst").previousElementSibling.style.display="none";
+  showEditName();
+}
+function addTask(){
+  if(!project()){ addProject(); return; }
+  edit = {kind:"task"};
+  openEdit("Nouvelle tâche","",60);
+}
+function addSubtask(taskId){
+  edit = {kind:"subtask", taskId};
+  openEdit("Nouvelle sous-tâche","",30);
+}
+function openEditExisting(id){
+  const f = findNode(id); if(!f) return;
+  edit = {kind:"edit", id};
+  openEdit("Modifier", f.node.name, f.node.estimate_min);
+}
+function resetNode(id){
+  const f = findNode(id); if(!f) return;
+  f.node.elapsed = 0; f.node.running = false; delete f.node.startedAt;
+  save(); render();
+}
+function deleteNode(id){
+  const f = findNode(id); if(!f) return;
+  if(f.parent){ f.parent.subtasks = f.parent.subtasks.filter(s => s.id !== id); }
+  else { f.p.tasks = f.p.tasks.filter(t => t.id !== id); }
+  save(); render();
+}
+
+// ---- Feuille d'édition ----
+function openEdit(title, name, est){
+  document.getElementById("editTitle").textContent = title;
+  const nameEl = document.getElementById("editName");
+  const estEl = document.getElementById("editEst");
+  nameEl.value = name;
+  estEl.value = est;
+  estEl.parentNode.style.display="";
+  estEl.previousElementSibling.style.display="";
+  estEl.style.display=""; 
+  document.querySelector("#editScrim .hint").style.display="";
+  document.getElementById("editScrim").classList.add("show");
+  setTimeout(()=>nameEl.focus(), 60);
+}
+function showEditName(){
+  const nameEl = document.getElementById("editName");
+  document.getElementById("editEst").style.display="none";
+  document.getElementById("editScrim").classList.add("show");
+  setTimeout(()=>nameEl.focus(), 60);
+}
+function closeEdit(){ document.getElementById("editScrim").classList.remove("show"); edit=null; }
+function commitEdit(){
+  if(!edit) return;
+  const name = document.getElementById("editName").value.trim();
+  if(!name){ document.getElementById("editName").focus(); return; }
+  let est = parseInt(document.getElementById("editEst").value, 10);
+  if(!(est >= 0)) est = 0;
+
+  if(edit.kind === "project"){
+    const p = {id:uid(), name, tasks:[]};
+    state.projects.push(p); selProject = p.id;
+  } else if(edit.kind === "task"){
+    project().tasks.push({id:uid(), name, estimate_min:est, elapsed:0, running:false, subtasks:[]});
+  } else if(edit.kind === "subtask"){
+    const t = project().tasks.find(t => t.id === edit.taskId);
+    if(t){ (t.subtasks = t.subtasks||[]).push({id:uid(), name, estimate_min:est, elapsed:0, running:false});
+           openTasks[t.id] = true; }
+  } else if(edit.kind === "edit"){
+    const f = findNode(edit.id); if(f){ f.node.name = name; f.node.estimate_min = est; }
+  }
+  closeEdit(); save(); render();
+}
+
+// ---- Menu contextuel ----
+function openMenu(id){
+  const f = findNode(id); if(!f) return;
+  menuCtx = id;
+  document.getElementById("menuTitle").textContent = f.node.name;
+  document.getElementById("menuScrim").classList.add("show");
+}
+function closeMenu(){ document.getElementById("menuScrim").classList.remove("show"); menuCtx=null; }
+
+// ---- Rendu ----
+function rowHTML(n, isSub, ctx){
+  const el = elapsed(n), ov = over(n), run = n.running;
+  const est = n.estimate_min > 0 ? hms(n.estimate_min*60) : null;
+  const pct = n.estimate_min > 0 ? Math.min(100, (el/(n.estimate_min*60))*100) : 0;
+  const hasSubs = !isSub && (n.subtasks||[]).length > 0;
+  const openCls = openTasks[n.id] ? "open" : "";
+  const caret = isSub ? `<div class="caret empty"></div>`
+    : `<div class="caret ${hasSubs?openCls:'empty'}" data-caret="${n.id}">▶</div>`;
+  const timeLine = `<div class="time">
+      ${run?'<span class="reclight"></span>':''}
+      <span class="val mono">${hms(el)}</span>
+      ${est?`<span class="est mono">/ ${est}</span>`:''}
+      ${ov?'<span class="over-flag">DÉPASSÉ</span>':''}
+    </div>`;
+  const bar = n.estimate_min > 0
+    ? `<div class="bar ${ov?'over':''}"><i style="width:${pct}%"></i></div>` : '';
+  const ctxLabel = ctx ? `<div class="name dim">${escapeHtml(ctx)}</div>` : '';
+  return `<div class="row ${isSub?'sub':''} ${run?'running':''}">
+      ${caret}
+      <div class="meta" data-open="${!isSub&&hasSubs?n.id:''}">
+        ${ctxLabel}
+        <div class="name">${escapeHtml(n.name)}</div>
+        ${timeLine}${bar}
+      </div>
+      <button class="play ${run?'on':''}" data-toggle="${n.id}">${run?'❚❚':'▶'}</button>
+      <button class="kebab" data-menu="${n.id}">⋮</button>
+    </div>`;
+}
+function escapeHtml(s){ return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function render(){
+  // Projets
+  const pc = document.getElementById("projects");
+  pc.innerHTML = state.projects.map(p =>
+    `<button class="chip ${p.id===selProject?'sel':''}" data-proj="${p.id}">${escapeHtml(p.name)}</button>`
+  ).join("") + `<button class="chip add" data-addproj="1">+ Projet</button>`;
+
+  // Onglets
+  document.getElementById("tabTasks").classList.toggle("sel", view==="tasks");
+  document.getElementById("tabDash").classList.toggle("sel", view==="dash");
+  document.getElementById("fab").style.display = view==="tasks" ? "" : "none";
+
+  const list = document.getElementById("list");
+
+  if(view === "dash"){
+    const active = allNodes().filter(x => x.node.running);
+    if(!active.length){
+      list.innerHTML = `<div class="empty">Aucune tâche active.<br>Lance un timer depuis un projet pour la voir apparaître ici.</div>`;
+    } else {
+      list.innerHTML = active.map(x =>
+        `<div class="card">${rowHTML(x.node, false, x.parent ? `${x.p.name} › ${x.parent.name}` : x.p.name)}</div>`
+      ).join("");
+    }
+  } else {
+    const p = project();
+    if(!p){
+      list.innerHTML = `<div class="empty"><b>Aucun projet.</b><br>Touche « + Projet » en haut pour commencer.</div>`;
+    } else if(!p.tasks.length){
+      list.innerHTML = `<div class="empty"><b>${escapeHtml(p.name)}</b> n'a pas encore de tâche.<br>Touche « + Tâche » en bas à droite.</div>`;
+    } else {
+      list.innerHTML = p.tasks.map(t => {
+        let html = `<div class="card">${rowHTML(t, false, null)}`;
+        if(openTasks[t.id]){
+          (t.subtasks||[]).forEach(s => { html += rowHTML(s, true, null); });
+          html += `<button class="addline addsub" data-addsub="${t.id}">+ Sous-tâche</button>`;
+        }
+        html += `</div>`;
+        return html;
+      }).join("");
+    }
+  }
+
+  // Bandeau "actives"
+  const running = allNodes().filter(x => x.node.running);
+  const overN = running.filter(x => over(x.node)).length;
+  const pill = document.getElementById("pill");
+  pill.className = "active-pill" + (overN ? " over" : running.length ? " live" : "");
+  pill.textContent = overN ? `${running.length} active · ${overN} dépassée`
+                           : `${running.length} active${running.length>1?'s':''}`;
+}
+
+// ---- Événements (délégation) ----
+document.addEventListener("click", (e) => {
+  const t = e.target.closest("[data-toggle],[data-menu],[data-proj],[data-addproj],[data-caret],[data-open],[data-addsub]");
+  if(!t) return;
+  if(t.dataset.toggle){ toggle(t.dataset.toggle); }
+  else if(t.dataset.menu){ openMenu(t.dataset.menu); }
+  else if(t.dataset.proj){ selProject = t.dataset.proj; view="tasks"; render(); }
+  else if(t.dataset.addproj){ addProject(); }
+  else if(t.dataset.addsub){ addSubtask(t.dataset.addsub); }
+  else if(t.dataset.caret || t.dataset.open){
+    const id = t.dataset.caret || t.dataset.open;
+    openTasks[id] = !openTasks[id]; render();
+  }
+});
+document.getElementById("tabTasks").onclick = () => { view="tasks"; render(); };
+document.getElementById("tabDash").onclick  = () => { view="dash"; render(); };
+document.getElementById("fab").onclick = addTask;
+
+document.getElementById("editCancel").onclick = closeEdit;
+document.getElementById("editSave").onclick = commitEdit;
+document.getElementById("editScrim").addEventListener("click", (e)=>{ if(e.target.id==="editScrim") closeEdit(); });
+document.getElementById("editName").addEventListener("keydown", (e)=>{ if(e.key==="Enter") commitEdit(); });
+
+document.getElementById("miEdit").onclick   = () => { const id=menuCtx; closeMenu(); openEditExisting(id); };
+document.getElementById("miReset").onclick  = () => { const id=menuCtx; closeMenu(); if(confirm("Remettre le compteur à zéro ?")) resetNode(id); };
+document.getElementById("miDelete").onclick = () => { const id=menuCtx; const f=findNode(id); closeMenu(); if(confirm(`Supprimer « ${f?f.node.name:''} » ?`)) deleteNode(id); };
+document.getElementById("miClose").onclick  = closeMenu;
+document.getElementById("menuScrim").addEventListener("click",(e)=>{ if(e.target.id==="menuScrim") closeMenu(); });
+
+// ---- Boucle 1s : rafraîchit l'affichage + sauvegarde des timers ----
+setInterval(() => {
+  if(view==="tasks" || view==="dash"){
+    // Ne re-render que si quelque chose tourne (évite de casser une saisie)
+    if(allNodes().some(x => x.node.running)){ save(); render(); }
+  }
+}, 1000);
+
+// ---- Alerte à la fermeture si des tâches sont actives ----
+window.addEventListener("beforeunload", (e) => {
+  if(allNodes().some(x => x.node.running)){
+    e.preventDefault();
+    e.returnValue = "Des tâches sont encore actives. Quitter ?";
+    return e.returnValue;
+  }
+});
+// Sauvegarde de secours quand l'app passe en arrière-plan (mobile)
+document.addEventListener("visibilitychange", () => { if(document.hidden) save(); });
+
+// ---- Service worker (mode hors-ligne, seulement si servi en http/https) ----
+if("serviceWorker" in navigator && location.protocol.startsWith("http")){
+  navigator.serviceWorker.register("sw.js").catch(()=>{});
+}
+
+render();
+</script>
+</body>
+</html>

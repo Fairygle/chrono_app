@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-ChronoApp - Suivi du temps par projet et par tâche.
+ChronoApp - Suivi du temps par projet, tache et sous-tache.
 
-- Création de projets et de tâches avec temps estimé
-- Timer PLAY / PAUSE sur chaque tâche (raccourci : ESPACE)
-- Indicateur visuel si une tâche dépasse le temps estimé
-- Dashboard des tâches actives, tous projets confondus
+- Projets > taches > sous-taches, chacun avec un temps estime
+- Timer PLAY / PAUSE sur chaque ligne (raccourci : ESPACE)
+- Indicateur rouge si une ligne depasse son temps estime
+- Dashboard des lignes actives, tous projets confondus
 - Sauvegarde locale automatique (%APPDATA%\\ChronoApp\\data.json)
+- Alerte a la fermeture si des timers sont encore actifs
 """
 
 import json
@@ -19,8 +20,8 @@ import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 
 APP_NAME = "ChronoApp"
-AUTOSAVE_MS = 15000  # sauvegarde auto toutes les 15 s
-TICK_MS = 1000       # rafraîchissement de l'affichage
+AUTOSAVE_MS = 15000
+TICK_MS = 1000
 
 
 # ----------------------------- Stockage local ------------------------------
@@ -38,19 +39,26 @@ def data_dir() -> str:
 DATA_FILE = os.path.join(data_dir(), "data.json")
 
 
+def _sanitize_node(n: dict) -> None:
+    n["running"] = False
+    n.pop("started_at", None)
+    n.setdefault("elapsed", 0.0)
+    n.setdefault("estimate_min", 0)
+
+
 def load_data() -> dict:
     if os.path.exists(DATA_FILE):
         try:
             with open(DATA_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            # Les timers ne tournent pas quand l'app est fermée
             for p in data.get("projects", []):
                 for t in p.get("tasks", []):
-                    t["running"] = False
-                    t.pop("started_at", None)
+                    _sanitize_node(t)
+                    t.setdefault("subtasks", [])
+                    for s in t["subtasks"]:
+                        _sanitize_node(s)
             return data
         except Exception:
-            # Fichier corrompu : on repart proprement sans écraser l'ancien
             try:
                 os.replace(DATA_FILE, DATA_FILE + ".bak")
             except Exception:
@@ -74,22 +82,22 @@ def fmt_hms(seconds: float) -> str:
     return f"{h:02d}:{m:02d}:{s:02d}"
 
 
-def task_elapsed(task: dict) -> float:
-    elapsed = task.get("elapsed", 0.0)
-    if task.get("running") and task.get("started_at"):
-        elapsed += time.time() - task["started_at"]
+def node_elapsed(node: dict) -> float:
+    elapsed = node.get("elapsed", 0.0)
+    if node.get("running") and node.get("started_at"):
+        elapsed += time.time() - node["started_at"]
     return elapsed
 
 
-def task_over(task: dict) -> bool:
-    est = task.get("estimate_min", 0)
-    return est > 0 and task_elapsed(task) > est * 60
+def node_over(node: dict) -> bool:
+    est = node.get("estimate_min", 0)
+    return est > 0 and node_elapsed(node) > est * 60
 
 
-# ------------------------- Boîte de dialogue tâche --------------------------
+# ------------------------- Boite de dialogue tache --------------------------
 
 class TaskDialog(simpledialog.Dialog):
-    """Demande le nom de la tâche et le temps estimé (en minutes)."""
+    """Demande le nom et le temps estime (en minutes)."""
 
     def __init__(self, parent, title, name="", estimate=60):
         self._name = name
@@ -98,12 +106,12 @@ class TaskDialog(simpledialog.Dialog):
         super().__init__(parent, title)
 
     def body(self, master):
-        ttk.Label(master, text="Nom de la tâche :").grid(row=0, column=0, sticky="w", pady=4)
+        ttk.Label(master, text="Nom :").grid(row=0, column=0, sticky="w", pady=4)
         self.e_name = ttk.Entry(master, width=32)
         self.e_name.insert(0, self._name)
         self.e_name.grid(row=0, column=1, pady=4)
 
-        ttk.Label(master, text="Temps estimé (minutes) :").grid(row=1, column=0, sticky="w", pady=4)
+        ttk.Label(master, text="Temps estime (minutes) :").grid(row=1, column=0, sticky="w", pady=4)
         self.e_est = ttk.Spinbox(master, from_=0, to=100000, width=10)
         self.e_est.delete(0, "end")
         self.e_est.insert(0, str(self._estimate))
@@ -113,14 +121,14 @@ class TaskDialog(simpledialog.Dialog):
     def validate(self):
         name = self.e_name.get().strip()
         if not name:
-            messagebox.showwarning(APP_NAME, "Le nom de la tâche est obligatoire.", parent=self)
+            messagebox.showwarning(APP_NAME, "Le nom est obligatoire.", parent=self)
             return False
         try:
             est = int(float(self.e_est.get()))
             if est < 0:
                 raise ValueError
         except ValueError:
-            messagebox.showwarning(APP_NAME, "Le temps estimé doit être un nombre de minutes.", parent=self)
+            messagebox.showwarning(APP_NAME, "Le temps estime doit etre un nombre de minutes.", parent=self)
             return False
         self.result = (name, est)
         return True
@@ -131,21 +139,19 @@ class TaskDialog(simpledialog.Dialog):
 class ChronoApp(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title(APP_NAME + " — Suivi du temps")
-        self.geometry("980x560")
-        self.minsize(820, 460)
+        self.title(APP_NAME + " - Suivi du temps")
+        self.geometry("1000x580")
+        self.minsize(860, 470)
 
         self.data = load_data()
         self.selected_project_id = None
-        self.last_toggled_task_id = None  # cible du raccourci ESPACE
+        self.last_toggled_id = None
 
         self._build_ui()
         self._refresh_projects()
         self.after(TICK_MS, self._tick)
         self.after(AUTOSAVE_MS, self._autosave)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
-
-        # Raccourci ESPACE : Play/Pause (sauf pendant la saisie de texte)
         self.bind_all("<space>", self._on_space)
 
     # ------------------------------ Interface ------------------------------
@@ -162,34 +168,33 @@ class ChronoApp(tk.Tk):
         root = ttk.Frame(self, padding=8)
         root.pack(fill="both", expand=True)
 
-        # --- Panneau gauche : projets ---
+        # --- Projets ---
         left = ttk.Frame(root)
         left.pack(side="left", fill="y", padx=(0, 8))
         ttk.Label(left, text="Projets", font=("Segoe UI", 11, "bold")).pack(anchor="w")
-        self.lb_projects = tk.Listbox(left, width=26, exportselection=False, activestyle="dotbox")
+        self.lb_projects = tk.Listbox(left, width=24, exportselection=False, activestyle="dotbox")
         self.lb_projects.pack(fill="y", expand=True, pady=4)
         self.lb_projects.bind("<<ListboxSelect>>", lambda e: self._on_project_select())
-
         pbtn = ttk.Frame(left)
         pbtn.pack(fill="x")
-        ttk.Button(pbtn, text="＋ Projet", command=self._add_project).pack(side="left", expand=True, fill="x")
-        ttk.Button(pbtn, text="🗑 Supprimer", command=self._delete_project).pack(side="left", expand=True, fill="x")
+        ttk.Button(pbtn, text="+ Projet", command=self._add_project).pack(side="left", expand=True, fill="x")
+        ttk.Button(pbtn, text="Suppr.", command=self._delete_project).pack(side="left", expand=True, fill="x")
 
-        # --- Panneau droit : onglets ---
+        # --- Onglets ---
         self.nb = ttk.Notebook(root)
         self.nb.pack(side="left", fill="both", expand=True)
 
-        # Onglet Tâches
+        # Onglet Taches (hierarchique)
         tab_tasks = ttk.Frame(self.nb, padding=6)
-        self.nb.add(tab_tasks, text="  Tâches du projet  ")
+        self.nb.add(tab_tasks, text="  Taches du projet  ")
 
-        cols = ("task", "estimate", "elapsed", "status")
-        self.tree = ttk.Treeview(tab_tasks, columns=cols, show="headings", selectmode="browse")
-        self.tree.heading("task", text="Tâche")
-        self.tree.heading("estimate", text="Estimé")
-        self.tree.heading("elapsed", text="Temps passé")
-        self.tree.heading("status", text="État")
-        self.tree.column("task", width=320, anchor="w")
+        cols = ("estimate", "elapsed", "status")
+        self.tree = ttk.Treeview(tab_tasks, columns=cols, show="tree headings", selectmode="browse")
+        self.tree.heading("#0", text="Tache / sous-tache")
+        self.tree.heading("estimate", text="Estime")
+        self.tree.heading("elapsed", text="Temps passe")
+        self.tree.heading("status", text="Etat")
+        self.tree.column("#0", width=340, anchor="w")
         self.tree.column("estimate", width=90, anchor="center")
         self.tree.column("elapsed", width=110, anchor="center")
         self.tree.column("status", width=170, anchor="center")
@@ -200,35 +205,32 @@ class ChronoApp(tk.Tk):
 
         tbtn = ttk.Frame(tab_tasks)
         tbtn.pack(fill="x", pady=(6, 0))
-        ttk.Button(tbtn, text="▶ / ⏸  Play-Pause  (ESPACE)", command=self._toggle_selected).pack(side="left")
-        ttk.Button(tbtn, text="＋ Tâche", command=self._add_task).pack(side="left", padx=6)
-        ttk.Button(tbtn, text="✎ Modifier", command=self._edit_task).pack(side="left")
-        ttk.Button(tbtn, text="↺ Remettre à zéro", command=self._reset_task).pack(side="left", padx=6)
-        ttk.Button(tbtn, text="🗑 Supprimer", command=self._delete_task).pack(side="left")
+        ttk.Button(tbtn, text="Play / Pause  (ESPACE)", command=self._toggle_selected).pack(side="left")
+        ttk.Button(tbtn, text="+ Tache", command=self._add_task).pack(side="left", padx=6)
+        ttk.Button(tbtn, text="+ Sous-tache", command=self._add_subtask).pack(side="left")
+        ttk.Button(tbtn, text="Modifier", command=self._edit_node).pack(side="left", padx=6)
+        ttk.Button(tbtn, text="Remise a zero", command=self._reset_node).pack(side="left")
+        ttk.Button(tbtn, text="Supprimer", command=self._delete_node).pack(side="left", padx=6)
 
         # Onglet Dashboard
         tab_dash = ttk.Frame(self.nb, padding=6)
-        self.nb.add(tab_dash, text="  Dashboard — tâches actives  ")
-        dcols = ("project", "task", "estimate", "elapsed", "status")
+        self.nb.add(tab_dash, text="  Dashboard - actives  ")
+        dcols = ("project", "item", "estimate", "elapsed", "status")
         self.dash = ttk.Treeview(tab_dash, columns=dcols, show="headings", selectmode="browse")
         for c, txt, w, a in (
-            ("project", "Projet", 180, "w"),
-            ("task", "Tâche", 280, "w"),
-            ("estimate", "Estimé", 90, "center"),
-            ("elapsed", "Temps passé", 110, "center"),
-            ("status", "État", 160, "center"),
+            ("project", "Projet", 170, "w"),
+            ("item", "Tache / sous-tache", 300, "w"),
+            ("estimate", "Estime", 90, "center"),
+            ("elapsed", "Temps passe", 110, "center"),
+            ("status", "Etat", 150, "center"),
         ):
             self.dash.heading(c, text=txt)
             self.dash.column(c, width=w, anchor=a)
         self.dash.tag_configure("over", foreground="#c62828")
         self.dash.pack(fill="both", expand=True)
         self.dash.bind("<Double-1>", lambda e: self._toggle_from_dash())
-        ttk.Label(
-            tab_dash,
-            text="Double-clic sur une ligne pour mettre en pause / reprendre.",
-        ).pack(anchor="w", pady=(6, 0))
+        ttk.Label(tab_dash, text="Double-clic (ou ESPACE) pour mettre en pause / reprendre.").pack(anchor="w", pady=(6, 0))
 
-        # Barre d'état
         self.status = ttk.Label(self, anchor="w", padding=(8, 4))
         self.status.pack(fill="x", side="bottom")
 
@@ -248,12 +250,7 @@ class ChronoApp(tk.Tk):
         for p in self.data["projects"]:
             self.lb_projects.insert("end", p["name"])
         ids = [p["id"] for p in self.data["projects"]]
-        if keep in ids:
-            idx = ids.index(keep)
-        elif ids:
-            idx = 0
-        else:
-            idx = None
+        idx = ids.index(keep) if keep in ids else (0 if ids else None)
         if idx is not None:
             self.lb_projects.selection_set(idx)
             self.selected_project_id = ids[idx]
@@ -270,66 +267,82 @@ class ChronoApp(tk.Tk):
 
     def _add_project(self):
         name = simpledialog.askstring(APP_NAME, "Nom du nouveau projet :", parent=self)
-        if not name or not name.strip():
-            return
-        p = {"id": uuid.uuid4().hex, "name": name.strip(), "tasks": []}
-        self.data["projects"].append(p)
-        self._refresh_projects(keep=p["id"])
-        self._save()
+        if name and name.strip():
+            p = {"id": uuid.uuid4().hex, "name": name.strip(), "tasks": []}
+            self.data["projects"].append(p)
+            self._refresh_projects(keep=p["id"])
+            self._save()
 
     def _delete_project(self):
         p = self._current_project()
-        if not p:
-            return
-        if messagebox.askyesno(APP_NAME, f"Supprimer le projet « {p['name']} » et toutes ses tâches ?"):
+        if p and messagebox.askyesno(APP_NAME, f"Supprimer le projet <<{p['name']}>> et tout son contenu ?"):
             self.data["projects"].remove(p)
             self._refresh_projects()
             self._save()
 
-    # -------------------------------- Tâches --------------------------------
+    # ------------------------- Recherche de noeuds -------------------------
 
-    def _task_by_id(self, tid):
+    def _find(self, nid):
+        """Retourne (project, parent_task_or_None, node) pour un id donne."""
         for p in self.data["projects"]:
             for t in p["tasks"]:
-                if t["id"] == tid:
-                    return p, t
-        return None, None
+                if t["id"] == nid:
+                    return p, None, t
+                for s in t.get("subtasks", []):
+                    if s["id"] == nid:
+                        return p, t, s
+        return None, None, None
 
-    def _selected_task(self):
+    def _selected(self):
         sel = self.tree.selection()
         if not sel:
-            return None, None
-        return self._task_by_id(sel[0])
+            return None, None, None
+        return self._find(sel[0])
 
-    def _task_values(self, t):
-        est = t.get("estimate_min", 0)
-        est_txt = fmt_hms(est * 60) if est else "—"
-        if t.get("running"):
-            state = "▶ En cours"
-        elif t.get("elapsed", 0) > 0:
-            state = "⏸ En pause"
+    def _iter_nodes(self):
+        for p in self.data["projects"]:
+            for t in p["tasks"]:
+                yield p, None, t
+                for s in t.get("subtasks", []):
+                    yield p, t, s
+
+    # -------------------------- Affichage des taches -----------------------
+
+    def _node_values(self, n):
+        est = n.get("estimate_min", 0)
+        est_txt = fmt_hms(est * 60) if est else "-"
+        if n.get("running"):
+            state = "En cours"
+        elif n.get("elapsed", 0) > 0:
+            state = "En pause"
         else:
-            state = "À faire"
-        if task_over(t):
-            state += "  ⚠ DÉPASSÉ"
-        return (t["name"], est_txt, fmt_hms(task_elapsed(t)), state)
+            state = "A faire"
+        if node_over(n):
+            state += "  ! DEPASSE"
+        return (est_txt, fmt_hms(node_elapsed(n)), state)
 
-    def _task_tags(self, t):
+    def _node_tags(self, n):
         tags = []
-        if task_over(t):
+        if node_over(n):
             tags.append("over")
-        if t.get("running"):
+        if n.get("running"):
             tags.append("running")
         return tuple(tags)
 
     def _refresh_tasks(self):
+        opened = {i for i in self.tree.get_children() if self.tree.item(i, "open")}
         sel = self.tree.selection()
         self.tree.delete(*self.tree.get_children())
         p = self._current_project()
         if not p:
             return
         for t in p["tasks"]:
-            self.tree.insert("", "end", iid=t["id"], values=self._task_values(t), tags=self._task_tags(t))
+            self.tree.insert("", "end", iid=t["id"], text=t["name"],
+                             values=self._node_values(t), tags=self._node_tags(t),
+                             open=(t["id"] in opened or True))
+            for s in t.get("subtasks", []):
+                self.tree.insert(t["id"], "end", iid=s["id"], text="   - " + s["name"],
+                                 values=self._node_values(s), tags=self._node_tags(s))
         for iid in sel:
             if self.tree.exists(iid):
                 self.tree.selection_set(iid)
@@ -337,88 +350,105 @@ class ChronoApp(tk.Tk):
     def _add_task(self):
         p = self._current_project()
         if not p:
-            messagebox.showinfo(APP_NAME, "Crée d'abord un projet.")
+            messagebox.showinfo(APP_NAME, "Cree d'abord un projet.")
             return
-        dlg = TaskDialog(self, "Nouvelle tâche")
+        dlg = TaskDialog(self, "Nouvelle tache")
         if dlg.result:
             name, est = dlg.result
             t = {"id": uuid.uuid4().hex, "name": name, "estimate_min": est,
-                 "elapsed": 0.0, "running": False}
+                 "elapsed": 0.0, "running": False, "subtasks": []}
             p["tasks"].append(t)
             self._refresh_tasks()
             self.tree.selection_set(t["id"])
             self._save()
 
-    def _edit_task(self):
-        _, t = self._selected_task()
-        if not t:
+    def _add_subtask(self):
+        _, parent, node = self._selected()
+        # Si une sous-tache est selectionnee, on ajoute a sa tache parente
+        task = node if (node and parent is None) else parent
+        if not task:
+            messagebox.showinfo(APP_NAME, "Selectionne une tache pour lui ajouter une sous-tache.")
             return
-        dlg = TaskDialog(self, "Modifier la tâche", t["name"], t.get("estimate_min", 0))
+        dlg = TaskDialog(self, "Nouvelle sous-tache")
         if dlg.result:
-            t["name"], t["estimate_min"] = dlg.result
+            name, est = dlg.result
+            s = {"id": uuid.uuid4().hex, "name": name, "estimate_min": est,
+                 "elapsed": 0.0, "running": False}
+            task.setdefault("subtasks", []).append(s)
+            self._refresh_tasks()
+            self.tree.selection_set(s["id"])
+            self._save()
+
+    def _edit_node(self):
+        _, _, n = self._selected()
+        if not n:
+            return
+        dlg = TaskDialog(self, "Modifier", n["name"], n.get("estimate_min", 0))
+        if dlg.result:
+            n["name"], n["estimate_min"] = dlg.result
             self._refresh_tasks()
             self._refresh_dashboard()
             self._save()
 
-    def _reset_task(self):
-        _, t = self._selected_task()
-        if not t:
-            return
-        if messagebox.askyesno(APP_NAME, f"Remettre le compteur de « {t['name']} » à zéro ?"):
-            t["elapsed"] = 0.0
-            t["running"] = False
-            t.pop("started_at", None)
+    def _reset_node(self):
+        _, _, n = self._selected()
+        if n and messagebox.askyesno(APP_NAME, f"Remettre le compteur de <<{n['name']}>> a zero ?"):
+            n["elapsed"] = 0.0
+            n["running"] = False
+            n.pop("started_at", None)
             self._refresh_tasks()
             self._refresh_dashboard()
             self._save()
 
-    def _delete_task(self):
-        p, t = self._selected_task()
-        if not t:
+    def _delete_node(self):
+        p, parent, n = self._selected()
+        if not n:
             return
-        if messagebox.askyesno(APP_NAME, f"Supprimer la tâche « {t['name']} » ?"):
-            p["tasks"].remove(t)
+        kind = "sous-tache" if parent else "tache"
+        if messagebox.askyesno(APP_NAME, f"Supprimer la {kind} <<{n['name']}>> ?"):
+            if parent:
+                parent["subtasks"].remove(n)
+            else:
+                p["tasks"].remove(n)
             self._refresh_tasks()
             self._refresh_dashboard()
             self._save()
 
     # ------------------------------ Play / Pause ----------------------------
 
-    def _toggle_task(self, task):
-        if task.get("running"):
-            task["elapsed"] = task_elapsed(task)
-            task["running"] = False
-            task.pop("started_at", None)
+    def _toggle(self, node):
+        if node.get("running"):
+            node["elapsed"] = node_elapsed(node)
+            node["running"] = False
+            node.pop("started_at", None)
         else:
-            task["running"] = True
-            task["started_at"] = time.time()
-        self.last_toggled_task_id = task["id"]
+            node["running"] = True
+            node["started_at"] = time.time()
+        self.last_toggled_id = node["id"]
         self._refresh_tasks()
         self._refresh_dashboard()
         self._save()
 
     def _toggle_selected(self):
-        _, t = self._selected_task()
-        if t:
-            self._toggle_task(t)
-        elif self.last_toggled_task_id:
-            _, t = self._task_by_id(self.last_toggled_task_id)
-            if t:
-                self._toggle_task(t)
+        _, _, n = self._selected()
+        if n:
+            self._toggle(n)
+        elif self.last_toggled_id:
+            _, _, n = self._find(self.last_toggled_id)
+            if n:
+                self._toggle(n)
 
     def _toggle_from_dash(self):
         sel = self.dash.selection()
         if sel:
-            _, t = self._task_by_id(sel[0])
-            if t:
-                self._toggle_task(t)
+            _, _, n = self._find(sel[0])
+            if n:
+                self._toggle(n)
 
     def _on_space(self, event):
-        # Ne pas intercepter la barre espace pendant une saisie de texte
         w = event.widget
         if isinstance(w, (tk.Entry, ttk.Entry, tk.Text, ttk.Spinbox, tk.Spinbox)):
             return
-        # Dashboard visible → agir sur la ligne sélectionnée du dashboard
         if self.nb.index(self.nb.select()) == 1 and self.dash.selection():
             self._toggle_from_dash()
         else:
@@ -427,16 +457,18 @@ class ChronoApp(tk.Tk):
 
     # ------------------------------- Dashboard ------------------------------
 
+    def _item_label(self, parent, node):
+        return f"{parent['name']} > {node['name']}" if parent else node["name"]
+
     def _refresh_dashboard(self):
         sel = self.dash.selection()
         self.dash.delete(*self.dash.get_children())
-        for p in self.data["projects"]:
-            for t in p["tasks"]:
-                if t.get("running"):
-                    v = self._task_values(t)
-                    self.dash.insert("", "end", iid=t["id"],
-                                     values=(p["name"], v[0], v[1], v[2], v[3]),
-                                     tags=self._task_tags(t))
+        for p, parent, n in self._iter_nodes():
+            if n.get("running"):
+                est, elapsed, state = self._node_values(n)
+                self.dash.insert("", "end", iid=n["id"],
+                                 values=(p["name"], self._item_label(parent, n), est, elapsed, state),
+                                 tags=self._node_tags(n))
         for iid in sel:
             if self.dash.exists(iid):
                 self.dash.selection_set(iid)
@@ -444,26 +476,25 @@ class ChronoApp(tk.Tk):
     # ----------------------------- Boucle & fin -----------------------------
 
     def _tick(self):
-        # Met à jour les temps affichés sans recréer les lignes
         p = self._current_project()
         if p:
-            for t in p["tasks"]:
-                if self.tree.exists(t["id"]):
-                    self.tree.item(t["id"], values=self._task_values(t), tags=self._task_tags(t))
-        running = [(pr, t) for pr in self.data["projects"] for t in pr["tasks"] if t.get("running")]
-        current_ids = set(self.dash.get_children())
-        if {t["id"] for _, t in running} != current_ids:
+            for _, _, n in [(p, None, t) for t in p["tasks"]] + \
+                           [(p, t, s) for t in p["tasks"] for s in t.get("subtasks", [])]:
+                if self.tree.exists(n["id"]):
+                    self.tree.item(n["id"], values=self._node_values(n), tags=self._node_tags(n))
+        running = [(pr, par, n) for pr, par, n in self._iter_nodes() if n.get("running")]
+        if {n["id"] for _, _, n in running} != set(self.dash.get_children()):
             self._refresh_dashboard()
         else:
-            for pr, t in running:
-                v = self._task_values(t)
-                self.dash.item(t["id"], values=(pr["name"], v[0], v[1], v[2], v[3]), tags=self._task_tags(t))
-        n = len(running)
-        over = sum(1 for _, t in running if task_over(t))
-        msg = f"{n} tâche(s) active(s)"
+            for pr, par, n in running:
+                est, elapsed, state = self._node_values(n)
+                self.dash.item(n["id"], values=(pr["name"], self._item_label(par, n), est, elapsed, state),
+                               tags=self._node_tags(n))
+        over = sum(1 for _, _, n in running if node_over(n))
+        msg = f"{len(running)} ligne(s) active(s)"
         if over:
-            msg += f"  —  ⚠ {over} en dépassement"
-        msg += f"   |   Données : {DATA_FILE}"
+            msg += f"  -  ! {over} en depassement"
+        msg += f"   |   Donnees : {DATA_FILE}"
         self.status.configure(text=msg, style="Over.TLabel" if over else "TLabel")
         self.after(TICK_MS, self._tick)
 
@@ -478,17 +509,27 @@ class ChronoApp(tk.Tk):
         self.after(AUTOSAVE_MS, self._autosave)
 
     def _on_close(self):
-        # Fige les compteurs en cours puis sauvegarde
-        for p in self.data["projects"]:
-            for t in p["tasks"]:
-                if t.get("running"):
-                    t["elapsed"] = task_elapsed(t)
-                    t["running"] = False
-                    t.pop("started_at", None)
+        running = [n for _, _, n in self._iter_nodes() if n.get("running")]
+        if running:
+            names = ", ".join(n["name"] for n in running[:5])
+            if len(running) > 5:
+                names += ", ..."
+            ok = messagebox.askyesno(
+                APP_NAME,
+                f"{len(running)} tache(s) sont encore actives :\n{names}\n\n"
+                "Quitter quand meme ? Les timers seront mis en pause et sauvegardes.",
+                icon="warning",
+            )
+            if not ok:
+                return
+        for _, _, n in self._iter_nodes():
+            if n.get("running"):
+                n["elapsed"] = node_elapsed(n)
+                n["running"] = False
+                n.pop("started_at", None)
         self._save()
         self.destroy()
 
 
 if __name__ == "__main__":
-    app = ChronoApp()
-    app.mainloop()
+    ChronoApp().mainloop()
