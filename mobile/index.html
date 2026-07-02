@@ -283,7 +283,11 @@ function openEdit(title, name, est){
 }
 function showEditName(){
   const nameEl = document.getElementById("editName");
-  document.getElementById("editEst").style.display="none";
+  const estEl = document.getElementById("editEst");
+  estEl.parentNode.style.display = "";  // réinitialiser (au cas où)
+  estEl.style.display = "none";
+  estEl.previousElementSibling.style.display = "none";
+  document.querySelector("#editScrim .hint").style.display = "none";
   document.getElementById("editScrim").classList.add("show");
   setTimeout(()=>nameEl.focus(), 60);
 }
