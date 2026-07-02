@@ -111,17 +111,31 @@ class TaskDialog(simpledialog.Dialog):
         self.result = None
         super().__init__(parent, title)
 
+    UNITS = (("minutes", 1), ("heures", 60), ("jours", 1440))
+
+    def _best_unit(self, est_min):
+        if est_min > 0 and est_min % 1440 == 0:
+            return est_min // 1440, "jours"
+        if est_min > 0 and est_min % 60 == 0:
+            return est_min // 60, "heures"
+        return est_min, "minutes"
+
     def body(self, master):
         ttk.Label(master, text="Nom :").grid(row=0, column=0, sticky="w", pady=4)
         self.e_name = ttk.Entry(master, width=32)
         self.e_name.insert(0, self._name)
-        self.e_name.grid(row=0, column=1, pady=4)
+        self.e_name.grid(row=0, column=1, columnspan=2, pady=4, sticky="w")
 
-        ttk.Label(master, text="Temps estime (minutes) :").grid(row=1, column=0, sticky="w", pady=4)
-        self.e_est = ttk.Spinbox(master, from_=0, to=100000, width=10)
+        ttk.Label(master, text="Temps estime (0 = aucun) :").grid(row=1, column=0, sticky="w", pady=4)
+        val, unit = self._best_unit(self._estimate)
+        self.e_est = ttk.Spinbox(master, from_=0, to=100000, width=8)
         self.e_est.delete(0, "end")
-        self.e_est.insert(0, str(self._estimate))
+        self.e_est.insert(0, str(val))
         self.e_est.grid(row=1, column=1, sticky="w", pady=4)
+        self.e_unit = ttk.Combobox(master, state="readonly", width=9,
+                                   values=[u[0] for u in self.UNITS])
+        self.e_unit.set(unit)
+        self.e_unit.grid(row=1, column=2, sticky="w", padx=(6, 0), pady=4)
         return self.e_name
 
     def validate(self):
@@ -130,13 +144,14 @@ class TaskDialog(simpledialog.Dialog):
             messagebox.showwarning(APP_NAME, "Le nom est obligatoire.", parent=self)
             return False
         try:
-            est = int(float(self.e_est.get()))
-            if est < 0:
+            val = float(self.e_est.get())
+            if val < 0:
                 raise ValueError
         except ValueError:
-            messagebox.showwarning(APP_NAME, "Le temps estime doit etre un nombre de minutes.", parent=self)
+            messagebox.showwarning(APP_NAME, "Le temps estime doit etre un nombre.", parent=self)
             return False
-        self.result = (name, est)
+        factor = dict(self.UNITS)[self.e_unit.get()]
+        self.result = (name, int(round(val * factor)))
         return True
 
 
@@ -221,18 +236,19 @@ class ChronoApp(tk.Tk):
         # Onglet Dashboard
         tab_dash = ttk.Frame(self.nb, padding=6)
         self.nb.add(tab_dash, text="  Dashboard - actives  ")
-        dcols = ("project", "item", "estimate", "elapsed", "status")
-        self.dash = ttk.Treeview(tab_dash, columns=dcols, show="headings", selectmode="browse")
+        dcols = ("estimate", "elapsed", "status")
+        self.dash = ttk.Treeview(tab_dash, columns=dcols, show="tree headings", selectmode="browse")
+        self.dash.heading("#0", text="Projet / ligne active")
+        self.dash.column("#0", width=340, anchor="w")
         for c, txt, w, a in (
-            ("project", "Projet", 170, "w"),
-            ("item", "Tache / sous-tache", 300, "w"),
-            ("estimate", "Estime", 90, "center"),
-            ("elapsed", "Temps passe", 110, "center"),
-            ("status", "Etat", 150, "center"),
+            ("estimate", "Estime", 100, "center"),
+            ("elapsed", "Temps passe", 120, "center"),
+            ("status", "Etat", 160, "center"),
         ):
             self.dash.heading(c, text=txt)
             self.dash.column(c, width=w, anchor=a)
         self.dash.tag_configure("over", foreground="#c62828")
+        self.dash.tag_configure("proj", foreground="#4aa3a0")
         self.dash.pack(fill="both", expand=True)
         self.dash.bind("<Double-1>", lambda e: self._toggle_from_dash())
         ttk.Label(tab_dash, text="Double-clic (ou ESPACE) pour mettre en pause / reprendre.").pack(anchor="w", pady=(6, 0))
@@ -469,14 +485,29 @@ class ChronoApp(tk.Tk):
     def _refresh_dashboard(self):
         sel = self.dash.selection()
         self.dash.delete(*self.dash.get_children())
-        actives = [(p, parent, n) for p, parent, n in self._iter_nodes() if n.get("running")]
-        # Tri : lignes depassees d'abord, puis les plus longues en premier
-        actives.sort(key=lambda x: (not node_over(x[2]), -node_elapsed(x[2])))
-        for p, parent, n in actives:
-            est, elapsed, state = self._node_values(n)
-            self.dash.insert("", "end", iid=n["id"],
-                             values=(p["name"], self._item_label(parent, n), est, elapsed, state),
-                             tags=self._node_tags(n))
+        # Regrouper les lignes actives par projet
+        groups = []
+        for p in self.data["projects"]:
+            rows = [(parent, n) for pr, parent, n in self._iter_nodes()
+                    if pr is p and n.get("running")]
+            if rows:
+                rows.sort(key=lambda x: (not node_over(x[1]), -node_elapsed(x[1])))
+                n_over = sum(1 for _, n in rows if node_over(n))
+                max_el = max(node_elapsed(n) for _, n in rows)
+                groups.append((p, rows, n_over, max_el))
+        # Projets avec depassement d'abord, puis plus longue activite
+        groups.sort(key=lambda g: (g[2] == 0, -g[3]))
+        for p, rows, n_over, _ in groups:
+            label = f"{p['name']}  ({len(rows)} active(s)"
+            label += f", {n_over} depassee(s))" if n_over else ")"
+            pid = "proj_" + p["id"]
+            self.dash.insert("", "end", iid=pid, text=label, open=True,
+                             tags=("proj",) if not n_over else ("proj", "over"))
+            for parent, n in rows:
+                est, elapsed, state = self._node_values(n)
+                self.dash.insert(pid, "end", iid=n["id"],
+                                 text="   " + self._item_label(parent, n),
+                                 values=(est, elapsed, state), tags=self._node_tags(n))
         for iid in sel:
             if self.dash.exists(iid):
                 self.dash.selection_set(iid)
@@ -491,13 +522,7 @@ class ChronoApp(tk.Tk):
                 if self.tree.exists(n["id"]):
                     self.tree.item(n["id"], values=self._node_values(n), tags=self._node_tags(n))
         running = [(pr, par, n) for pr, par, n in self._iter_nodes() if n.get("running")]
-        if {n["id"] for _, _, n in running} != set(self.dash.get_children()):
-            self._refresh_dashboard()
-        else:
-            for pr, par, n in running:
-                est, elapsed, state = self._node_values(n)
-                self.dash.item(n["id"], values=(pr["name"], self._item_label(par, n), est, elapsed, state),
-                               tags=self._node_tags(n))
+        self._refresh_dashboard()
         over = sum(1 for _, _, n in running if node_over(n))
         msg = f"{len(running)} ligne(s) active(s)"
         if over:
