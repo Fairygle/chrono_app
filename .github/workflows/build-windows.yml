@@ -1,0 +1,44 @@
+name: Build Windows Executable
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PyInstaller
+        run: pip install pyinstaller
+
+      - name: Build ChronoApp.exe
+        run: pyinstaller --onefile --noconsole --name ChronoApp chrono_app.py
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChronoApp-Windows
+          path: dist/ChronoApp.exe
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "ChronoApp — Dernière version Windows"
+          body: |
+            Exécutable Windows 11 de ChronoApp (suivi du temps par projet).
+            Téléchargez **ChronoApp.exe** ci-dessous, puis double-cliquez pour lancer.
+            Les données sont sauvegardées automatiquement dans %APPDATA%\ChronoApp.
+          files: dist/ChronoApp.exe
