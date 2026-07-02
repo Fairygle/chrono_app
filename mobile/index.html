@@ -455,7 +455,16 @@ document.addEventListener("visibilitychange", () => { if(document.hidden) save()
 
 // ---- Service worker (mode hors-ligne, seulement si servi en http/https) ----
 if("serviceWorker" in navigator && location.protocol.startsWith("http")){
-  navigator.serviceWorker.register("sw.js").catch(()=>{});
+  navigator.serviceWorker.register("sw.js", {updateViaCache:"none"})
+    .then((reg) => {
+      // Vérifier les mises à jour toutes les 10 secondes (pendant l'utilisation)
+      setInterval(() => reg.update(), 10000);
+      // Écouter les mises à jour et recharger si une nouvelle version est installée
+      reg.addEventListener("controllerchange", () => {
+        window.location.reload();
+      });
+    })
+    .catch(()=>{});
 }
 
 render();
