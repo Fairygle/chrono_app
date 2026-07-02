@@ -76,10 +76,16 @@ def save_data(data: dict) -> None:
 # ------------------------------- Utilitaires -------------------------------
 
 def fmt_hms(seconds: float) -> str:
+    """Format jours / heures / minutes (secondes visibles sous l'heure)."""
     seconds = int(max(0, seconds))
-    h, r = divmod(seconds, 3600)
+    j, r = divmod(seconds, 86400)
+    h, r = divmod(r, 3600)
     m, s = divmod(r, 60)
-    return f"{h:02d}:{m:02d}:{s:02d}"
+    if j:
+        return f"{j}j {h:02d}h {m:02d}m"
+    if h:
+        return f"{h}h {m:02d}m {s:02d}s"
+    return f"{m}m {s:02d}s"
 
 
 def node_elapsed(node: dict) -> float:
@@ -463,12 +469,14 @@ class ChronoApp(tk.Tk):
     def _refresh_dashboard(self):
         sel = self.dash.selection()
         self.dash.delete(*self.dash.get_children())
-        for p, parent, n in self._iter_nodes():
-            if n.get("running"):
-                est, elapsed, state = self._node_values(n)
-                self.dash.insert("", "end", iid=n["id"],
-                                 values=(p["name"], self._item_label(parent, n), est, elapsed, state),
-                                 tags=self._node_tags(n))
+        actives = [(p, parent, n) for p, parent, n in self._iter_nodes() if n.get("running")]
+        # Tri : lignes depassees d'abord, puis les plus longues en premier
+        actives.sort(key=lambda x: (not node_over(x[2]), -node_elapsed(x[2])))
+        for p, parent, n in actives:
+            est, elapsed, state = self._node_values(n)
+            self.dash.insert("", "end", iid=n["id"],
+                             values=(p["name"], self._item_label(parent, n), est, elapsed, state),
+                             tags=self._node_tags(n))
         for iid in sel:
             if self.dash.exists(iid):
                 self.dash.selection_set(iid)

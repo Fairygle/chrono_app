@@ -12,16 +12,18 @@
 <style>
   :root{
     --bg:#12151C; --surface:#1C212B; --surface2:#242B37; --line:#2E3644;
-    --text:#E8EAED; --muted:#8A93A3; --teal:#3DD6C4; --amber:#F5A623; --red:#E5484D;
-    --radius:14px;
+    --text:#E8EAED; --muted:#9AA4B5; --teal:#3DD6C4; --amber:#F5A623; --red:#E5484D;
+    --radius:0;
     --safe-t:env(safe-area-inset-top,0px); --safe-b:env(safe-area-inset-bottom,0px);
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  :focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+  button{font-family:inherit}
   html,body{margin:0;background:var(--bg);color:var(--text);
-    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+    font-family:Impact,Haettenschweiler,'Arial Narrow Bold','Franklin Gothic Medium',sans-serif;letter-spacing:.02em;}
   body{padding-bottom:calc(84px + var(--safe-b));min-height:100vh}
   .mono{font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1;
-    font-family:ui-monospace,"SF Mono","Segoe UI Mono",Menlo,Consolas,monospace;}
+    font-family:Impact,Haettenschweiler,'Arial Narrow Bold',sans-serif;}
 
   header{position:sticky;top:0;z-index:20;background:rgba(18,21,28,.92);
     backdrop-filter:blur(8px);border-bottom:1px solid var(--line);
@@ -30,24 +32,24 @@
   .brand h1{font-size:19px;margin:0;letter-spacing:.14em;text-transform:uppercase;font-weight:700}
   .brand .dot{color:var(--amber)}
   .active-pill{font-size:12px;color:var(--muted);border:1px solid var(--line);
-    border-radius:999px;padding:5px 11px;white-space:nowrap}
+    border-radius:0;padding:5px 11px;white-space:nowrap}
   .active-pill.live{color:var(--amber);border-color:var(--amber)}
   .active-pill.over{color:var(--red);border-color:var(--red)}
 
   .projects{display:flex;gap:8px;overflow-x:auto;padding:12px 16px 2px;scrollbar-width:none}
   .projects::-webkit-scrollbar{display:none}
   .chip{flex:0 0 auto;background:var(--surface);border:1px solid var(--line);color:var(--muted);
-    padding:9px 14px;border-radius:999px;font-size:14px;font-weight:600}
+    padding:9px 14px;border-radius:0;font-size:14px;font-weight:600}
   .chip.sel{color:var(--bg);background:var(--teal);border-color:var(--teal)}
   .chip.add{color:var(--teal);border-style:dashed}
 
   main{padding:8px 12px 0}
   .tabbar{display:flex;gap:6px;padding:6px 4px 12px}
-  .tab{flex:1;text-align:center;padding:10px;border-radius:10px;font-size:14px;font-weight:600;
+  .tab{flex:1;text-align:center;padding:10px;border-radius:0;font-size:14px;font-weight:600;
     color:var(--muted);background:var(--surface);border:1px solid var(--line)}
   .tab.sel{color:var(--text);background:var(--surface2);border-color:var(--teal)}
 
-  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:0;
     margin-bottom:10px;overflow:hidden}
   .row{display:flex;align-items:center;gap:12px;padding:13px 14px;position:relative}
   .row.sub{padding-left:26px;background:var(--surface2)}
@@ -61,20 +63,20 @@
   .name{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .name.dim{color:var(--muted);font-weight:600}
   .sub .name{font-size:14px}
-  .time{font-size:13px;color:var(--muted);margin-top:3px;display:flex;align-items:center;gap:6px}
+  .time{font-size:11px;color:var(--muted);margin-top:3px;display:flex;align-items:center;gap:6px}
   .time .val{color:var(--text)}
   .time .est{color:var(--muted)}
   .over-flag{color:var(--red);font-weight:700;font-size:11px;letter-spacing:.04em}
-  .reclight{width:8px;height:8px;border-radius:50%;background:var(--amber);flex:0 0 auto;
+  .reclight{width:8px;height:8px;border-radius:0;background:var(--amber);flex:0 0 auto;
     box-shadow:0 0 0 0 rgba(245,166,35,.6);animation:pulse 1.6s infinite}
   @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(245,166,35,.55)}70%{box-shadow:0 0 0 7px rgba(245,166,35,0)}100%{box-shadow:0 0 0 0 rgba(245,166,35,0)}}
 
-  .bar{height:3px;background:var(--line);border-radius:2px;margin-top:8px;overflow:hidden}
+  .bar{height:3px;background:var(--line);border-radius:0;margin-top:8px;overflow:hidden}
   .bar > i{display:block;height:100%;background:var(--teal);width:0%}
   .bar.over > i{background:var(--red)}
 
-  .play{flex:0 0 auto;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);
-    background:var(--surface2);color:var(--text);font-size:17px;display:grid;place-items:center}
+  .play{flex:0 0 auto;width:44px;height:44px;border-radius:0;border:1px solid var(--line);
+    background:var(--surface2);color:var(--text);font-size:14px;display:grid;place-items:center}
   .play.on{background:var(--amber);color:#1a1206;border-color:var(--amber)}
   .kebab{flex:0 0 auto;width:34px;height:40px;background:none;border:none;color:var(--muted);font-size:20px}
 
@@ -86,22 +88,22 @@
   .empty b{color:var(--text)}
 
   .fab{position:fixed;right:18px;bottom:calc(18px + var(--safe-b));z-index:30;
-    background:var(--teal);color:var(--bg);border:none;border-radius:16px;padding:15px 20px;
+    background:var(--teal);color:var(--bg);border:none;border-radius:0;padding:15px 20px;
     font-size:15px;font-weight:700;box-shadow:0 8px 24px rgba(0,0,0,.4)}
 
   /* modal */
   .scrim{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:40;display:none;
     align-items:flex-end}
   .scrim.show{display:flex}
-  .sheet{width:100%;background:var(--surface);border-top-left-radius:20px;border-top-right-radius:20px;
+  .sheet{width:100%;background:var(--surface);border-top-left-radius:0;border-top-right-radius:0;
     padding:20px 18px calc(20px + var(--safe-b));border-top:1px solid var(--line)}
   .sheet h2{margin:2px 0 16px;font-size:17px}
   .sheet label{display:block;font-size:12px;color:var(--muted);margin:12px 0 6px;text-transform:uppercase;letter-spacing:.06em}
-  .sheet input{width:100%;background:var(--surface2);border:1px solid var(--line);border-radius:10px;
+  .sheet input{width:100%;background:var(--surface2);border:1px solid var(--line);border-radius:0;
     color:var(--text);font-size:16px;padding:13px 12px}
   .sheet .hint{font-size:12px;color:var(--muted);margin-top:6px}
   .sheet .actions{display:flex;gap:10px;margin-top:20px}
-  .btn{flex:1;padding:14px;border-radius:12px;font-size:15px;font-weight:700;border:1px solid var(--line);
+  .btn{flex:1;padding:14px;border-radius:0;font-size:15px;font-weight:700;border:1px solid var(--line);
     background:var(--surface2);color:var(--text)}
   .btn.primary{background:var(--teal);color:var(--bg);border-color:var(--teal)}
   .btn.danger{background:none;color:var(--red);border-color:transparent;flex:0 0 auto;padding:14px 4px}
@@ -116,7 +118,7 @@
 <header>
   <div class="brand">
     <h1>Chrono<span class="dot">·</span>App</h1>
-    <div id="pill" class="active-pill">0 active</div>
+    <div id="pill" class="active-pill" role="status" aria-live="polite">0 active</div>
   </div>
   <div class="projects" id="projects"></div>
 </header>
@@ -133,11 +135,11 @@
 
 <!-- Feuille édition -->
 <div class="scrim" id="editScrim">
-  <div class="sheet">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="editTitle">
     <h2 id="editTitle">Nouvelle tâche</h2>
-    <label>Nom</label>
+    <label for="editName">Nom</label>
     <input id="editName" placeholder="Ex. Maquette page d'accueil" autocomplete="off" />
-    <label>Temps estimé (minutes) — 0 = aucun</label>
+    <label for="editEst">Temps estimé (minutes) — 0 = aucun</label>
     <input id="editEst" type="number" inputmode="numeric" min="0" value="60" />
     <div class="hint">Une ligne devient rouge quand le temps passé dépasse l'estimation.</div>
     <div class="actions">
@@ -149,7 +151,7 @@
 
 <!-- Menu contextuel -->
 <div class="scrim menu" id="menuScrim">
-  <div class="sheet">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="menuTitle">
     <h2 id="menuTitle">Options</h2>
     <button class="mi" id="miEdit">Modifier le nom / l'estimation</button>
     <button class="mi" id="miReset">Remettre le compteur à zéro</button>
@@ -201,10 +203,12 @@ function elapsed(n){
 function over(n){ return n.estimate_min > 0 && elapsed(n) > n.estimate_min * 60; }
 function hms(s){
   s = Math.max(0, Math.floor(s));
-  const h = String(Math.floor(s/3600)).padStart(2,"0");
-  const m = String(Math.floor((s%3600)/60)).padStart(2,"0");
-  const x = String(s%60).padStart(2,"0");
-  return `${h}:${m}:${x}`;
+  const j = Math.floor(s/86400), h = Math.floor((s%86400)/3600),
+        m = Math.floor((s%3600)/60), x = s%60;
+  const p = n => String(n).padStart(2,"0");
+  if(j > 0) return `${j}j ${p(h)}h ${p(m)}m`;
+  if(h > 0) return `${h}h ${p(m)}m ${p(x)}s`;
+  return `${m}m ${p(x)}s`;
 }
 function project(){ return state.projects.find(p => p.id === selProject) || null; }
 function findNode(id){
@@ -348,8 +352,9 @@ function rowHTML(n, isSub, ctx){
         <div class="name">${escapeHtml(n.name)}</div>
         ${timeLine}${bar}
       </div>
-      <button class="play ${run?'on':''}" data-toggle="${n.id}">${run?'❚❚':'▶'}</button>
-      <button class="kebab" data-menu="${n.id}">⋮</button>
+      <button class="play ${run?'on':''}" data-toggle="${n.id}"
+        aria-label="${run?'Mettre en pause':'Démarrer'} ${escapeHtml(n.name)}" aria-pressed="${run}">${run?'❚❚':'▶'}</button>
+      <button class="kebab" data-menu="${n.id}" aria-label="Options pour ${escapeHtml(n.name)}">⋮</button>
     </div>`;
 }
 function escapeHtml(s){ return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -369,7 +374,11 @@ function render(){
   const list = document.getElementById("list");
 
   if(view === "dash"){
-    const active = allNodes().filter(x => x.node.running);
+    const active = allNodes().filter(x => x.node.running).sort((a,b) => {
+      const oa = over(a.node)?1:0, ob = over(b.node)?1:0;
+      if(oa !== ob) return ob - oa;               // dépassées en premier
+      return elapsed(b.node) - elapsed(a.node);   // puis les plus longues
+    });
     if(!active.length){
       list.innerHTML = `<div class="empty">Aucune tâche active.<br>Lance un timer depuis un projet pour la voir apparaître ici.</div>`;
     } else {
@@ -433,6 +442,7 @@ document.getElementById("miReset").onclick  = () => { const id=menuCtx; closeMen
 document.getElementById("miDelete").onclick = () => { const id=menuCtx; const f=findNode(id); closeMenu(); if(confirm(`Supprimer « ${f?f.node.name:''} » ?`)) deleteNode(id); };
 document.getElementById("miClose").onclick  = closeMenu;
 document.getElementById("menuScrim").addEventListener("click",(e)=>{ if(e.target.id==="menuScrim") closeMenu(); });
+document.addEventListener("keydown",(e)=>{ if(e.key==="Escape"){ closeEdit(); closeMenu(); } });
 
 // ---- Boucle 1s : rafraîchit l'affichage + sauvegarde des timers ----
 setInterval(() => {
