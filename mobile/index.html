@@ -153,6 +153,9 @@
   <h2>Export</h2>
   <button class="side-btn" id="expCsv"><span>Exporter en CSV</span><span class="state">↓</span></button>
   <button class="side-btn" id="expJson"><span>Exporter en JSON</span><span class="state">↓</span></button>
+  <button class="side-btn" id="impJson"><span>Importer un JSON</span><span class="state">↑</span></button>
+  <input type="file" id="impFile" accept=".json,application/json" style="display:none" aria-hidden="true" />
+  <button class="side-btn" id="shareBtn"><span>Partager le récapitulatif</span><span class="state">➦</span></button>
 
   <h2>Affichage</h2>
   <button class="side-btn" id="setTheme"><span>Mode sombre</span><span class="state"></span></button>
@@ -354,6 +357,51 @@ function exportJson(){
   foldRunning(); save();
   download("chronoapp-" + today() + ".json", JSON.stringify(state, null, 2), "application/json");
 }
+function importJson(file){
+  const r = new FileReader();
+  r.onload = () => {
+    try{
+      const parsed = JSON.parse(r.result);
+      const nb = Array.isArray(parsed.projects) ? parsed.projects.length : 0;
+      if(!confirm(`Remplacer les données actuelles par ce fichier (${nb} projet(s)) ?\nUn backup de l'état actuel sera conservé.`)) return;
+      try{ localStorage.setItem(KEY + ".backup", JSON.stringify(state)); }catch(e){}
+      state = migrate(parsed);
+      save(); render();
+      alert("Import réussi ✓");
+    }catch(e){ alert("Fichier illisible : " + e.message); }
+  };
+  r.readAsText(file);
+}
+function buildRecap(){
+  foldRunning();
+  const lines = ["ChronoApp — récapitulatif du " + today(), ""];
+  const projs = state.projects.map(p => ({p, tot: projTotal(p)})).sort((a,b) => b.tot - a.tot);
+  for(const g of projs){
+    lines.push(g.p.name.toUpperCase() + " — " + disp(g.tot));
+    const tasks = [...g.p.tasks].sort((a,b) => elapsed(b) - elapsed(a));
+    for(const t of tasks){
+      let l = "  • " + t.name + " : " + disp(elapsed(t));
+      if(t.estimate_min > 0) l += " / " + disp(t.estimate_min*60) + (over(t) ? "  ⚠ DÉPASSÉ" : "");
+      if(t.done) l += " ✓";
+      lines.push(l);
+    }
+    lines.push("");
+  }
+  const total = projs.reduce((a,g) => a + g.tot, 0);
+  lines.push("TOTAL : " + disp(total));
+  return lines.join("\n");
+}
+async function shareRecap(){
+  const text = buildRecap();
+  if(navigator.share){
+    try{ await navigator.share({title: "ChronoApp — temps par projet", text}); return; }
+    catch(e){ if(e && e.name === "AbortError") return; }
+  }
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    try{ await navigator.clipboard.writeText(text); alert("Récapitulatif copié dans le presse-papiers ✓"); return; }catch(e){}
+  }
+  download("chronoapp-recap-" + today() + ".txt", text);
+}
 
 // ---- Feuilles ----
 function fillProjSelect(selected){
@@ -551,6 +599,12 @@ document.getElementById("setDecimal").onclick = () => {
   state.settings.decimal = !state.settings.decimal; save(); render(); };
 document.getElementById("expCsv").onclick = exportCsv;
 document.getElementById("expJson").onclick = exportJson;
+document.getElementById("impJson").onclick = () => document.getElementById("impFile").click();
+document.getElementById("impFile").addEventListener("change", (e) => {
+  if(e.target.files && e.target.files[0]) importJson(e.target.files[0]);
+  e.target.value = "";
+});
+document.getElementById("shareBtn").onclick = shareRecap;
 
 document.getElementById("editProj").addEventListener("change", (e) => {
   document.getElementById("newProjBlock").style.display = e.target.value === "__new" ? "" : "none";
