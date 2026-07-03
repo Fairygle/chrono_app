@@ -44,6 +44,7 @@ def _sanitize_node(n: dict) -> None:
     n.pop("started_at", None)
     n.setdefault("elapsed", 0.0)
     n.setdefault("estimate_min", 0)
+    n.setdefault("pinned", False)
 
 
 def load_data() -> dict:
@@ -229,7 +230,10 @@ class ChronoApp(tk.Tk):
         ttk.Button(tbtn, text="Play / Pause  (ESPACE)", command=self._toggle_selected).pack(side="left")
         ttk.Button(tbtn, text="+ Tache", command=self._add_task).pack(side="left", padx=6)
         ttk.Button(tbtn, text="+ Sous-tache", command=self._add_subtask).pack(side="left")
-        ttk.Button(tbtn, text="Modifier", command=self._edit_node).pack(side="left", padx=6)
+        ttk.Button(tbtn, text="Epingler", command=self._pin_node).pack(side="left", padx=6)
+        ttk.Button(tbtn, text="Monter", command=lambda: self._move_node(-1)).pack(side="left")
+        ttk.Button(tbtn, text="Descendre", command=lambda: self._move_node(1)).pack(side="left", padx=6)
+        ttk.Button(tbtn, text="Modifier", command=self._edit_node).pack(side="left")
         ttk.Button(tbtn, text="Remise a zero", command=self._reset_node).pack(side="left")
         ttk.Button(tbtn, text="Supprimer", command=self._delete_node).pack(side="left", padx=6)
 
@@ -252,6 +256,20 @@ class ChronoApp(tk.Tk):
         self.dash.pack(fill="both", expand=True)
         self.dash.bind("<Double-1>", lambda e: self._toggle_from_dash())
         ttk.Label(tab_dash, text="Double-clic (ou ESPACE) pour mettre en pause / reprendre.").pack(anchor="w", pady=(6, 0))
+
+        # Onglet Comparatif : passe vs estime
+        tab_cmp = ttk.Frame(self.nb, padding=6)
+        self.nb.add(tab_cmp, text="  Comparatif  ")
+        self.cmp = ttk.Treeview(tab_cmp, columns=("elapsed", "estimate", "delta"),
+                                show="tree headings", selectmode="none")
+        self.cmp.heading("#0", text="Projet / tache (sous-taches incluses)")
+        self.cmp.column("#0", width=330, anchor="w")
+        for c, txt in (("elapsed", "Temps passe"), ("estimate", "Estime"), ("delta", "Ecart")):
+            self.cmp.heading(c, text=txt)
+            self.cmp.column(c, width=115, anchor="center")
+        self.cmp.tag_configure("over", foreground="#c62828")
+        self.cmp.tag_configure("proj", foreground="#4aa3a0")
+        self.cmp.pack(fill="both", expand=True)
 
         self.status = ttk.Label(self, anchor="w", padding=(8, 4))
         self.status.pack(fill="x", side="bottom")
@@ -359,11 +377,13 @@ class ChronoApp(tk.Tk):
         if not p:
             return
         for t in p["tasks"]:
-            self.tree.insert("", "end", iid=t["id"], text=t["name"],
+            t_txt = ("📌 " if t.get("pinned") else "") + t["name"]
+            self.tree.insert("", "end", iid=t["id"], text=t_txt,
                              values=self._node_values(t), tags=self._node_tags(t),
                              open=(t["id"] in opened or True))
             for s in t.get("subtasks", []):
-                self.tree.insert(t["id"], "end", iid=s["id"], text="   - " + s["name"],
+                s_txt = "   - " + ("📌 " if s.get("pinned") else "") + s["name"]
+                self.tree.insert(t["id"], "end", iid=s["id"], text=s_txt,
                                  values=self._node_values(s), tags=self._node_tags(s))
         for iid in sel:
             if self.tree.exists(iid):
@@ -399,6 +419,32 @@ class ChronoApp(tk.Tk):
             task.setdefault("subtasks", []).append(s)
             self._refresh_tasks()
             self.tree.selection_set(s["id"])
+            self._save()
+
+    def _pin_node(self):
+        p, parent, n = self._selected()
+        if not n:
+            return
+        n["pinned"] = not n.get("pinned")
+        arr = parent["subtasks"] if parent else p["tasks"]
+        if n["pinned"]:
+            arr.remove(n)
+            arr.insert(0, n)
+        self._refresh_tasks()
+        self.tree.selection_set(n["id"])
+        self._save()
+
+    def _move_node(self, d):
+        p, parent, n = self._selected()
+        if not n:
+            return
+        arr = parent["subtasks"] if parent else p["tasks"]
+        i = arr.index(n)
+        j = i + d
+        if 0 <= j < len(arr):
+            arr[i], arr[j] = arr[j], arr[i]
+            self._refresh_tasks()
+            self.tree.selection_set(n["id"])
             self._save()
 
     def _edit_node(self):
@@ -512,6 +558,49 @@ class ChronoApp(tk.Tk):
             if self.dash.exists(iid):
                 self.dash.selection_set(iid)
 
+    # ------------------------------ Comparatif ------------------------------
+
+    def _task_totals(self, t):
+        el = node_elapsed(t)
+        est = t.get("estimate_min", 0) * 60
+        for st in t.get("subtasks", []):
+            el += node_elapsed(st)
+            est += st.get("estimate_min", 0) * 60
+        return el, est
+
+    def _fmt_delta(self, el, est):
+        d = el - est
+        return ("+" if d >= 0 else "-") + fmt_hms(abs(d))
+
+    def _refresh_compare(self):
+        self.cmp.delete(*self.cmp.get_children())
+        projs = []
+        for p in self.data["projects"]:
+            el = est = 0
+            for t in p["tasks"]:
+                tel, test_ = self._task_totals(t)
+                el += tel
+                est += test_
+            projs.append((p, el, est))
+        projs.sort(key=lambda x: -(x[1] - x[2]))
+        for p, el, est in projs:
+            over = est > 0 and el > est
+            pid = "cmp_" + p["id"]
+            self.cmp.insert("", "end", iid=pid, text=p["name"], open=True,
+                            values=(fmt_hms(el),
+                                    fmt_hms(est) if est else "-",
+                                    self._fmt_delta(el, est) if est else "-"),
+                            tags=("proj", "over") if over else ("proj",))
+            rows = [(t, *self._task_totals(t)) for t in p["tasks"]]
+            rows.sort(key=lambda x: -(x[1] - x[2]))
+            for t, tel, test_ in rows:
+                t_over = test_ > 0 and tel > test_
+                self.cmp.insert(pid, "end", iid="cmp_" + t["id"], text="   " + t["name"],
+                                values=(fmt_hms(tel),
+                                        fmt_hms(test_) if test_ else "-",
+                                        self._fmt_delta(tel, test_) if test_ else "-"),
+                                tags=("over",) if t_over else ())
+
     # ----------------------------- Boucle & fin -----------------------------
 
     def _tick(self):
@@ -523,6 +612,7 @@ class ChronoApp(tk.Tk):
                     self.tree.item(n["id"], values=self._node_values(n), tags=self._node_tags(n))
         running = [(pr, par, n) for pr, par, n in self._iter_nodes() if n.get("running")]
         self._refresh_dashboard()
+        self._refresh_compare()
         over = sum(1 for _, _, n in running if node_over(n))
         msg = f"{len(running)} ligne(s) active(s)"
         if over:

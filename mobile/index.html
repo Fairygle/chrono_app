@@ -109,6 +109,16 @@
     background:var(--surface2);color:var(--text);font-size:14px;display:grid;place-items:center}
   .play.on{background:var(--amber);color:#1a1206;border-color:var(--amber)}
   .kebab{flex:0 0 auto;width:38px;height:44px;background:none;border:none;color:var(--muted);font-size:20px}
+  .handle{flex:0 0 auto;width:28px;height:44px;background:none;border:none;color:var(--muted);
+    font-size:15px;cursor:grab;touch-action:none}
+  .dragging{opacity:.45;outline:1px dashed var(--teal)}
+  .pin{font-size:12px}
+  .proj-sum{font-size:12px;color:var(--muted);margin:-4px 2px 10px}
+  .proj-sum.over{color:var(--red)}
+  .row.stat{cursor:default}
+  .delta{font-weight:700}
+  .delta.neg{color:var(--red)}
+  .delta.pos{color:var(--teal)}
 
   .addline{width:100%;text-align:left;padding:13px 14px;min-height:44px;background:none;border:none;
     border-top:1px dashed var(--line);color:var(--teal);font-size:14px;font-weight:600}
@@ -168,6 +178,7 @@
   <div class="tabbar" role="tablist" aria-label="Vues">
     <button class="tab" id="tabTasks" role="tab" aria-selected="true">Tâches du projet</button>
     <button class="tab" id="tabDash" role="tab" aria-selected="false">Dashboard actives</button>
+    <button class="tab" id="tabStats" role="tab" aria-selected="false">Comparatif</button>
   </div>
   <div id="list"></div>
 </main>
@@ -203,6 +214,7 @@
 <div class="scrim menu" id="menuScrim">
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="menuTitle">
     <h2 id="menuTitle">Options</h2>
+    <button class="mi" id="miPin">Épingler en haut</button>
     <button class="mi" id="miEdit">Modifier le nom / l'estimation</button>
     <button class="mi" id="miReset">Remettre le compteur à zéro</button>
     <button class="mi del" id="miDelete">Supprimer</button>
@@ -223,7 +235,7 @@ function normNode(n){
   if(n.running && n.startedAt){ elapsed += (Date.now() - n.startedAt) / 1000; } // fige au chargement
   return { id: n.id || uid(), name: String(n.name || "Sans nom"),
            estimate_min: Math.max(0, Number(n.estimate_min) || 0),
-           elapsed, running: false };
+           elapsed, running: false, pinned: !!n.pinned };
 }
 function migrate(raw){
   const s = (raw && typeof raw === "object") ? raw : {};
@@ -275,6 +287,21 @@ function hms(s){
   if(j > 0) return `${j}j ${p(h)}h ${p(m)}m`;
   if(h > 0) return `${h}h ${p(m)}m ${p(x)}s`;
   return `${m}m ${p(x)}s`;
+}
+// Totaux (tâche = elle-même + ses sous-tâches)
+function totals(t){
+  let el = elapsed(t), est = (t.estimate_min||0)*60;
+  for(const s of (t.subtasks||[])){ el += elapsed(s); est += (s.estimate_min||0)*60; }
+  return {el, est};
+}
+function projTotals(p){
+  let el = 0, est = 0;
+  for(const t of p.tasks){ const x = totals(t); el += x.el; est += x.est; }
+  return {el, est};
+}
+function fmtDelta(el, est){
+  const d = el - est;
+  return (d >= 0 ? "+" : "-") + hms(Math.abs(d));
 }
 // Meilleure unité pour pré-remplir l'édition (jours > heures > minutes)
 function bestUnit(estMin){
@@ -373,10 +400,10 @@ function commitEdit(){
     const p = {id:uid(), name, tasks:[]};
     state.projects.push(p); selProject = p.id; view = "tasks";
   } else if(edit.kind === "task"){
-    project().tasks.push({id:uid(), name, estimate_min:est, elapsed:0, running:false, subtasks:[]});
+    project().tasks.push({id:uid(), name, estimate_min:est, elapsed:0, running:false, pinned:false, subtasks:[]});
   } else if(edit.kind === "subtask"){
     const t = project().tasks.find(t => t.id === edit.taskId);
-    if(t){ (t.subtasks = t.subtasks||[]).push({id:uid(), name, estimate_min:est, elapsed:0, running:false});
+    if(t){ (t.subtasks = t.subtasks||[]).push({id:uid(), name, estimate_min:est, elapsed:0, running:false, pinned:false});
            openTasks[t.id] = true; }
   } else if(edit.kind === "edit"){
     const f = findNode(edit.id); if(f){ f.node.name = name; f.node.estimate_min = est; }
@@ -387,6 +414,7 @@ function openMenu(id){
   const f = findNode(id); if(!f) return;
   menuCtx = id;
   document.getElementById("menuTitle").textContent = f.node.name;
+  document.getElementById("miPin").textContent = f.node.pinned ? "Désépingler" : "Épingler en haut";
   document.getElementById("menuScrim").classList.add("show");
   setTimeout(() => document.getElementById("miEdit").focus(), 60);
 }
@@ -395,7 +423,7 @@ function closeMenu(){ document.getElementById("menuScrim").classList.remove("sho
 // ---- Rendu ----
 function escapeHtml(s){ return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-function rowHTML(n, isSub, ctx){
+function rowHTML(n, isSub, ctx, drag){
   const el = elapsed(n), ov = over(n), run = n.running;
   const est = n.estimate_min > 0 ? hms(n.estimate_min*60) : null;
   const pct = n.estimate_min > 0 ? Math.min(100, (el/(n.estimate_min*60))*100) : 0;
@@ -405,11 +433,13 @@ function rowHTML(n, isSub, ctx){
       ? `<button class="caret ${openTasks[n.id]?'open':''}" data-caret="${n.id}"
            aria-expanded="${!!openTasks[n.id]}" aria-label="Sous-tâches de ${escapeHtml(n.name)}">▶</button>`
       : `<span class="caret empty" aria-hidden="true">·</span>`;
-  return `<div class="row ${isSub?'sub':''} ${run?'running':''}">
-      ${caret}
+  const handle = drag ? `<button class="handle" data-drag="${n.id}"
+      aria-label="Réorganiser ${escapeHtml(n.name)} (glisser)">⠿</button>` : '';
+  return `<div class="row ${isSub?'sub':''} ${run?'running':''}" ${isSub?`data-subrow="${n.id}"`:''}>
+      ${handle}${caret}
       <div class="meta" ${!isSub&&hasSubs?`data-open="${n.id}"`:''}>
         ${ctx?`<div class="name dim">${escapeHtml(ctx)}</div>`:''}
-        <div class="name">${escapeHtml(n.name)}</div>
+        <div class="name">${n.pinned?'<span class="pin" aria-hidden="true">📌</span> ':''}${escapeHtml(n.name)}</div>
         <div class="time">
           ${run?'<span class="reclight" aria-hidden="true"></span>':''}
           <span class="val mono">${hms(el)}</span>
@@ -437,6 +467,7 @@ function render(){
 
   document.getElementById("tabTasks").setAttribute("aria-selected", view==="tasks");
   document.getElementById("tabDash").setAttribute("aria-selected", view==="dash");
+  document.getElementById("tabStats").setAttribute("aria-selected", view==="stats");
   document.getElementById("fab").style.display = view==="tasks" ? "" : "none";
 
   const list = document.getElementById("list");
@@ -474,6 +505,40 @@ function render(){
          </section>`
       ).join("");
     }
+  } else if(view === "stats"){
+    // ---- Comparatif : passé vs estimé ----
+    const statRow = (name, x) => {
+      const ov = x.est > 0 && x.el > x.est;
+      const pct = x.est > 0 ? Math.min(100, (x.el/x.est)*100) : 0;
+      return `<div class="row stat">
+        <div class="meta">
+          <div class="name">${escapeHtml(name)}</div>
+          <div class="time"><span class="val mono">${hms(x.el)}</span>
+            ${x.est>0?`<span class="mono">/ ${hms(x.est)}</span>`:`<span>(pas d'estimation)</span>`}
+            ${x.est>0?`<span class="delta mono ${ov?'neg':'pos'}">${fmtDelta(x.el, x.est)}</span>`:''}
+            ${ov?'<span class="over-flag">DÉPASSÉ</span>':''}</div>
+          ${x.est>0?`<div class="bar ${ov?'over':''}"><i style="width:${pct}%"></i></div>`:''}
+        </div>
+      </div>`;
+    };
+    const projs = state.projects
+      .map(pr => ({pr, x: projTotals(pr)}))
+      .sort((a,b) => (b.x.el - b.x.est) - (a.x.el - a.x.est));
+    let html = "";
+    if(!projs.length){
+      html = `<div class="empty"><b>Aucun projet.</b><br>Crée un projet pour comparer les temps.</div>`;
+    } else {
+      html += `<h2 class="group-h">Totaux par projet</h2>
+        <div class="card">${projs.map(g => statRow(g.pr.name, g.x)).join('')}</div>`;
+      const p = project();
+      if(p && p.tasks.length){
+        const rows = p.tasks.map(t => ({t, x: totals(t)}))
+          .sort((a,b) => (b.x.el - b.x.est) - (a.x.el - a.x.est));
+        html += `<h2 class="group-h">Tâches de ${escapeHtml(p.name)} <span style="color:var(--muted)">· sous-tâches incluses</span></h2>
+          <div class="card">${rows.map(r => statRow(r.t.name, r.x)).join('')}</div>`;
+      }
+    }
+    list.innerHTML = html;
   } else {
     const p = project();
     if(!p){
@@ -482,10 +547,14 @@ function render(){
       list.innerHTML = `<h2 class="group-h">${escapeHtml(p.name)}</h2>
         <div class="empty"><b>${escapeHtml(p.name)}</b> n'a pas encore de tâche.<br>Touche « + Tâche » en bas à droite.</div>`;
     } else {
-      list.innerHTML = `<h2 class="group-h">${escapeHtml(p.name)}</h2>` + p.tasks.map(t => {
-        let html = `<div class="card">${rowHTML(t, false, null)}`;
+      const tt = projTotals(p);
+      const sum = (tt.el > 0 || tt.est > 0)
+        ? `<div class="proj-sum mono ${tt.est>0&&tt.el>tt.est?'over':''}">passé ${hms(tt.el)}${tt.est>0?` / estimé ${hms(tt.est)} · écart ${fmtDelta(tt.el, tt.est)}`:''}</div>`
+        : '';
+      list.innerHTML = `<h2 class="group-h">${escapeHtml(p.name)}</h2>` + sum + p.tasks.map(t => {
+        let html = `<div class="card" data-card="${t.id}">${rowHTML(t, false, null, true)}`;
         if(openTasks[t.id]){
-          (t.subtasks||[]).forEach(s => { html += rowHTML(s, true, null); });
+          (t.subtasks||[]).forEach(s => { html += rowHTML(s, true, null, true); });
           html += `<button class="addline addsub" data-addsub="${t.id}">+ Sous-tâche</button>`;
         }
         html += `</div>`;
@@ -522,6 +591,7 @@ document.getElementById("menuBtn").onclick = () =>
 document.getElementById("sidebarScrim").onclick = closeSidebar;
 document.getElementById("tabTasks").onclick = () => { view = "tasks"; render(); };
 document.getElementById("tabDash").onclick  = () => { view = "dash"; render(); };
+document.getElementById("tabStats").onclick = () => { view = "stats"; render(); };
 document.getElementById("fab").onclick = addTask;
 
 document.getElementById("editCancel").onclick = closeEdit;
@@ -530,6 +600,12 @@ document.getElementById("editScrim").addEventListener("click", (e)=>{ if(e.targe
 document.getElementById("editName").addEventListener("keydown", (e)=>{ if(e.key==="Enter") commitEdit(); });
 document.getElementById("editEst").addEventListener("keydown", (e)=>{ if(e.key==="Enter") commitEdit(); });
 
+document.getElementById("miPin").onclick    = () => { const id=menuCtx; closeMenu();
+  const f=findNode(id); if(!f) return;
+  f.node.pinned = !f.node.pinned;
+  const arr = f.parent ? f.parent.subtasks : f.p.tasks;
+  if(f.node.pinned){ arr.splice(arr.indexOf(f.node),1); arr.unshift(f.node); }
+  save(); render(); };
 document.getElementById("miEdit").onclick   = () => { const id=menuCtx; closeMenu(); openEditExisting(id); };
 document.getElementById("miReset").onclick  = () => { const id=menuCtx; closeMenu(); if(confirm("Remettre le compteur à zéro ?")) resetNode(id); };
 document.getElementById("miDelete").onclick = () => { const id=menuCtx; const f=findNode(id); closeMenu(); if(confirm(`Supprimer « ${f?f.node.name:''} » ?`)) deleteNode(id); };
@@ -542,6 +618,52 @@ document.addEventListener("keydown", (e) => {
   if(e.key === " " && !/^(INPUT|SELECT|TEXTAREA|BUTTON)$/.test(document.activeElement.tagName)){
     if(lastToggled){ e.preventDefault(); toggle(lastToggled); }
   }
+});
+
+// ---- Drag & drop (tactile + souris) via la poignée ⠿ ----
+let dragCtx = null;
+function commitOrder(d){
+  if(d.isSub){
+    const f = findNode(d.id); if(!f || !f.parent) return;
+    const ids = [...d.container.querySelectorAll("[data-subrow]")].map(x => x.dataset.subrow);
+    f.parent.subtasks.sort((a,b) => ids.indexOf(a.id) - ids.indexOf(b.id));
+  } else {
+    const p = project(); if(!p) return;
+    const ids = [...d.container.querySelectorAll("[data-card]")].map(x => x.dataset.card);
+    p.tasks.sort((a,b) => ids.indexOf(a.id) - ids.indexOf(b.id));
+  }
+}
+document.addEventListener("pointerdown", (e) => {
+  const h = e.target.closest("[data-drag]"); if(!h) return;
+  const f = findNode(h.dataset.drag); if(!f) return;
+  e.preventDefault();
+  const el = f.parent ? h.closest("[data-subrow]") : h.closest("[data-card]");
+  if(!el) return;
+  dragCtx = { id: h.dataset.drag, isSub: !!f.parent, el, container: el.parentNode };
+  el.classList.add("dragging");
+});
+document.addEventListener("pointermove", (e) => {
+  if(!dragCtx) return;
+  e.preventDefault();
+  const sel = dragCtx.isSub ? "[data-subrow]" : "[data-card]";
+  const sibs = [...dragCtx.container.querySelectorAll(sel)].filter(c => c !== dragCtx.el);
+  let placed = false;
+  for(const c of sibs){
+    const r = c.getBoundingClientRect();
+    if(e.clientY < r.top + r.height/2){
+      dragCtx.container.insertBefore(dragCtx.el, c); placed = true; break;
+    }
+  }
+  if(!placed && sibs.length){
+    dragCtx.container.insertBefore(dragCtx.el, sibs[sibs.length-1].nextSibling);
+  }
+}, {passive:false});
+document.addEventListener("pointerup", () => {
+  if(!dragCtx) return;
+  dragCtx.el.classList.remove("dragging");
+  commitOrder(dragCtx);
+  dragCtx = null;
+  save(); render();
 });
 
 // ---- Boucle 1 s ----
