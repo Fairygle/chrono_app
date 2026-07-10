@@ -109,10 +109,11 @@
   .gname{font-size:13px;font-weight:700;color:var(--teal);text-transform:uppercase;letter-spacing:.06em;
     min-width:0;overflow-wrap:anywhere}
   .gtot{font-size:15px;font-weight:700;flex:0 0 auto}
-  .gsub{font-size:11px;color:var(--muted);padding:0 12px}
+  .gsub{font-size:11px;color:var(--muted);padding:0 12px;display:flex;align-items:center;gap:6px}
   .gsub .neg{color:var(--red);font-weight:700}
   .gsub .pos{color:var(--teal);font-weight:700}
-  .gproj-bar{margin:8px 12px 12px}
+  .gdot{width:8px;height:8px;flex:0 0 auto;background:var(--line)}
+  .gdot.ok{background:var(--ok,var(--teal))} .gdot.warn{background:var(--amber)} .gdot.bad{background:var(--red)}
   .gtask{padding:9px 12px 10px;border-top:1px solid var(--line)}
   .gline{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
   .tname{font-size:14px;font-weight:600;min-width:0;overflow-wrap:anywhere}
@@ -120,7 +121,6 @@
   .ttime{font-size:11px;color:var(--muted);flex:0 0 auto}
   .ttime .neg{color:var(--red);font-weight:700}
   .gbar{height:12px;background:var(--surface2);position:relative;margin-top:6px}
-  .gproj-bar .gbar{height:16px}
   .gbar > i{position:absolute;left:0;top:0;bottom:0;min-width:2px}
   .gbar > i.ok{background:var(--teal)}
   .gbar > i.warn{background:var(--amber)}
@@ -623,10 +623,9 @@ function render(){
               <span class="gname" style="flex:1">${escapeHtml(g.p.name)}</span>
               <span class="gtot mono">${disp(g.tot)}</span></div>
             ${closed ? '' : `
-            ${g.est > 0 ? `<div class="gsub mono">estimé ${disp(g.est)} · écart
-                <span class="${dOver?'neg':'pos'}">${(g.tot>=g.est?'+':'-') + disp(Math.abs(g.tot-g.est))}</span></div>
-              <div class="gproj-bar">${budgetBar(g.tot, g.est, true)}</div>`
-            : `<div class="gproj-bar">${relBar(g.tot, Math.max(1, groups[0].tot))}</div>`}
+            ${g.est > 0 ? `<div class="gsub mono"><span class="gdot ${dOver?'bad':(g.tot/g.est>=0.75?'warn':'ok')}" aria-hidden="true"></span>estimé ${disp(g.est)} · ${Math.round(g.tot/g.est*100)} % · écart
+                <span class="${dOver?'neg':'pos'}">${(g.tot>=g.est?'+':'-') + disp(Math.abs(g.tot-g.est))}</span></div>`
+            : `<div class="gsub mono">pas d'estimation sur ce projet</div>`}
             ${tasks.length ? tasks.map(t => {
               const el = elapsed(t);
               return `<div class="gtask ${t.done?'done':''}">
