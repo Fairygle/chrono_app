@@ -78,8 +78,10 @@
   .row.running{box-shadow:inset 3px 0 0 var(--amber)}
   .row.done .name{text-decoration:line-through;color:var(--muted)}
   .row.done{opacity:.7}
-  .row.sub{padding-left:14px;background:var(--surface2)}
-  .chk{width:24px;height:24px;flex:0 0 auto;accent-color:var(--teal)}
+  .row.sub{position:relative;padding-left:44px;background:var(--surface2)}
+  .row.sub::before{content:"";position:absolute;left:23px;top:0;bottom:0;width:2px;background:var(--line)}
+  .row.sub::after{content:"↳";position:absolute;left:27px;top:50%;transform:translateY(-50%);
+    font-size:13px;color:var(--muted)}
   .meta{flex:1;min-width:0}
   .name{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .row.sub .name{font-size:14px}
@@ -235,6 +237,7 @@
 <div class="scrim menu" id="menuScrim">
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="menuTitle">
     <h2 id="menuTitle">Options</h2>
+    <button class="mi" id="miDone">Marquer terminée</button>
     <button class="mi" id="miAddSub">+ Sous-tâche</button>
     <button class="mi" id="miEdit">Modifier</button>
     <button class="mi" id="miReset">Remettre le compteur à zéro</button>
@@ -613,10 +616,11 @@ function openMenu(id){
   menuCtx = id;
   const isSub = !!f.parent;
   document.getElementById("menuTitle").textContent = f.node.name;
+  document.getElementById("miDone").textContent = f.node.done ? "Rouvrir" : "Marquer terminée";
   document.getElementById("miAddSub").style.display = isSub ? "none" : "";
   document.getElementById("miDelete").textContent = isSub ? "Supprimer la sous-tâche" : "Supprimer la tâche";
   document.getElementById("menuScrim").classList.add("show");
-  setTimeout(() => document.getElementById(isSub ? "miEdit" : "miAddSub").focus(), 60);
+  setTimeout(() => document.getElementById("miDone").focus(), 60);
 }
 function closeMenu(){ document.getElementById("menuScrim").classList.remove("show"); menuCtx = null; }
 
@@ -640,8 +644,6 @@ function subRow(s, parentDone){
   const el = elapsed(s), ov = over(s);
   const pct = s.estimate_min > 0 ? Math.min(100, (el/(s.estimate_min*60))*100) : 0;
   return `<div class="row sub ${s.running?'running':''} ${s.done?'done':''}">
-    <input type="checkbox" class="chk" data-done="${s.id}" ${s.done?'checked':''}
-      aria-label="Marquer ${escapeHtml(s.name)} comme ${s.done?'à faire':'terminée'}" />
     <div class="meta">
       <div class="name">${escapeHtml(s.name)}</div>
       <div class="time">
@@ -670,8 +672,6 @@ function taskRow(t, activeOnly){
     : '';
   let html = `<div class="row ${running?'running':''} ${t.done?'done':''}">
     ${caret}
-    <input type="checkbox" class="chk" data-done="${t.id}" ${t.done?'checked':''}
-      aria-label="Marquer ${escapeHtml(t.name)} comme ${t.done?'à faire':'terminée'}" />
     <div class="meta">
       <div class="name">${escapeHtml(t.name)}${withSubs?`<span class="subcount"> · ${t.subtasks.length} sous-tâche${t.subtasks.length>1?'s':''}</span>`:''}</div>
       <div class="time">
@@ -838,9 +838,6 @@ document.getElementById("pill").addEventListener("click", () => {
   if(onlyActive) view = "tasks";
   render();
 });
-document.addEventListener("change", (e) => {
-  if(e.target.matches("[data-done]")) setDone(e.target.dataset.done, e.target.checked);
-});
 document.getElementById("menuBtn").onclick = () =>
   document.getElementById("sidebar").classList.contains("open") ? closeSidebar() : openSidebar();
 document.getElementById("sidebarScrim").onclick = closeSidebar;
@@ -873,6 +870,9 @@ document.getElementById("editScrim").addEventListener("click", (e)=>{ if(e.targe
 for(const id of ["editName","newProjName","editEst"])
   document.getElementById(id).addEventListener("keydown", (e)=>{ if(e.key==="Enter") commitEdit(); });
 
+document.getElementById("miDone").onclick = () => { const id=menuCtx; closeMenu();
+  const f = findNode(id); if(f) setDone(id, !f.node.done);
+};
 document.getElementById("miAddSub").onclick = () => { const id=menuCtx; closeMenu(); openNewSubtask(id); };
 document.getElementById("miEdit").onclick   = () => { const id=menuCtx; closeMenu(); openEditNode(id); };
 document.getElementById("miReset").onclick  = () => { const id=menuCtx; closeMenu();
