@@ -78,9 +78,12 @@
   .row.running{box-shadow:inset 3px 0 0 var(--amber)}
   .row.done .name{text-decoration:line-through;color:var(--muted)}
   .row.done{opacity:.7}
+  .row.sub{padding-left:14px;background:var(--surface2)}
   .chk{width:24px;height:24px;flex:0 0 auto;accent-color:var(--teal)}
   .meta{flex:1;min-width:0}
   .name{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row.sub .name{font-size:14px}
+  .subcount{font-size:11px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0}
   .time{font-size:11px;color:var(--muted);margin-top:3px;display:flex;align-items:center;gap:6px}
   .time .val{color:var(--text)}
   .over-flag{color:var(--red);font-weight:700;font-size:10px;letter-spacing:.04em}
@@ -96,6 +99,9 @@
   .play.on{background:var(--amber);color:#1a1206;border-color:var(--amber)}
   .play[disabled]{opacity:.35}
   .kebab{flex:0 0 auto;width:36px;height:44px;background:none;border:none;color:var(--muted);font-size:20px}
+  .tcaret{flex:0 0 auto;width:26px;height:26px;background:none;border:1px solid var(--line);
+    font-size:10px;transition:transform .12s}
+  .tcaret.open{transform:rotate(90deg)}
 
   .empty{color:var(--muted);text-align:center;padding:44px 24px;font-size:15px;line-height:1.5}
   .empty b{color:var(--text)}
@@ -115,17 +121,22 @@
   .gdot{width:8px;height:8px;flex:0 0 auto;background:var(--line)}
   .gdot.ok{background:var(--ok,var(--teal))} .gdot.warn{background:var(--amber)} .gdot.bad{background:var(--red)}
   .gtask{padding:7px 12px 8px;border-top:1px solid var(--line)}
+  .gtask.gsubtask{padding-left:24px;background:var(--surface2)}
   .gline{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
-  .tname{font-size:14px;font-weight:600;min-width:0;overflow-wrap:anywhere}
+  .tname{font-size:14px;font-weight:600;min-width:0;overflow-wrap:anywhere;display:flex;align-items:center;gap:6px}
   .gtask.done .tname{text-decoration:line-through;color:var(--muted)}
   .ttime{font-size:11px;color:var(--muted);flex:0 0 auto}
   .ttime .neg{color:var(--red);font-weight:700}
   .gbar{height:8px;background:var(--surface2);position:relative;margin-top:5px}
+  .gtask.gsubtask .gbar{height:6px}
   .gbar > i{position:absolute;left:0;top:0;bottom:0;min-width:2px}
   .gbar > i.ok{background:var(--teal)}
   .gbar > i.warn{background:var(--amber)}
   .gbar > i.over{background:var(--red)}
   .gbar > i.rel{background:var(--teal);opacity:.55}
+  .gcaret{flex:0 0 auto;width:20px;height:20px;background:none;border:1px solid var(--line);
+    font-size:9px;transition:transform .12s}
+  .gcaret.open{transform:rotate(90deg)}
   .glegend{font-size:11px;color:var(--muted);margin:0 2px 12px;line-height:1.5}
   .glegend b{color:var(--red)}
 
@@ -189,17 +200,19 @@
 
 <button class="fab" id="fab">+ Tâche</button>
 
-<!-- Création / édition de tâche -->
+<!-- Création / édition de tâche ou sous-tâche -->
 <div class="scrim" id="editScrim">
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="editTitle">
     <h2 id="editTitle">Nouvelle tâche</h2>
-    <label for="editName">Nom de la tâche</label>
+    <label for="editName">Nom</label>
     <input id="editName" placeholder="Ex. Maquette page d'accueil" autocomplete="off" />
-    <label for="editProj">Projet</label>
-    <select id="editProj"></select>
-    <div id="newProjBlock" style="display:none">
-      <label for="newProjName">Nom du nouveau projet</label>
-      <input id="newProjName" placeholder="Ex. Client X" autocomplete="off" />
+    <div id="editProjGroup">
+      <label for="editProj">Projet</label>
+      <select id="editProj"></select>
+      <div id="newProjBlock" style="display:none">
+        <label for="newProjName">Nom du nouveau projet</label>
+        <input id="newProjName" placeholder="Ex. Client X" autocomplete="off" />
+      </div>
     </div>
     <label for="editEst">Temps estimé (optionnel — 0 = aucun)</label>
     <div class="est-row">
@@ -210,7 +223,7 @@
         <option value="1440">jours</option>
       </select>
     </div>
-    <div class="hint">Si le temps passé dépasse l'estimation, la tâche passe en rouge.</div>
+    <div class="hint">Si le temps passé dépasse l'estimation, la ligne passe en rouge.</div>
     <div class="actions">
       <button class="btn" id="editCancel">Annuler</button>
       <button class="btn primary" id="editSave">Enregistrer</button>
@@ -218,13 +231,14 @@
   </div>
 </div>
 
-<!-- Menu tâche -->
+<!-- Menu tâche / sous-tâche -->
 <div class="scrim menu" id="menuScrim">
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="menuTitle">
     <h2 id="menuTitle">Options</h2>
-    <button class="mi" id="miEdit">Modifier (nom, projet, estimation)</button>
+    <button class="mi" id="miAddSub">+ Sous-tâche</button>
+    <button class="mi" id="miEdit">Modifier</button>
     <button class="mi" id="miReset">Remettre le compteur à zéro</button>
-    <button class="mi del" id="miDelete">Supprimer la tâche</button>
+    <button class="mi del" id="miDelete">Supprimer</button>
     <button class="mi" id="miClose">Fermer</button>
   </div>
 </div>
@@ -232,10 +246,21 @@
 <script>
 "use strict";
 const KEY = "chronoapp.v1";   // inchangé : les données survivent aux mises à jour
-const SCHEMA = 4;
+const SCHEMA = 5;
 const uid = () => Math.random().toString(36).slice(2, 10);
 
-// ---- Migration : les sous-tâches d'anciennes versions sont fusionnées dans leur tâche ----
+// ---- Migration ----
+// v5 : chaque tâche peut avoir des sous-tâches. Si un import contient d'anciennes
+// sous-tâches réelles (v2/v3), elles sont désormais préservées telles quelles
+// (avant, elles étaient fusionnées dans le total du parent).
+function normSub(sub){
+  const s = (sub && typeof sub === "object") ? sub : {};
+  let el = Number(s.elapsed) || 0;
+  if(s.running && s.startedAt) el += (Date.now() - s.startedAt) / 1000;
+  return { id: s.id || uid(), name: String(s.name || "Sans nom"),
+           estimate_min: Math.max(0, Number(s.estimate_min) || 0),
+           elapsed: el, running: false, done: !!s.done };
+}
 function migrate(raw){
   const s = (raw && typeof raw === "object") ? raw : {};
   const out = { schema: SCHEMA, projects: [] };
@@ -248,15 +273,10 @@ function migrate(raw){
       const node = (t && typeof t === "object") ? t : {};
       let elapsed = Number(node.elapsed) || 0;
       if(node.running && node.startedAt) elapsed += (Date.now() - node.startedAt) / 1000;
-      let est = Math.max(0, Number(node.estimate_min) || 0);
-      for(const sub of (Array.isArray(node.subtasks) ? node.subtasks : [])){
-        let sel = Number(sub && sub.elapsed) || 0;
-        if(sub && sub.running && sub.startedAt) sel += (Date.now() - sub.startedAt) / 1000;
-        elapsed += sel;
-        est += Math.max(0, Number(sub && sub.estimate_min) || 0);
-      }
+      const est = Math.max(0, Number(node.estimate_min) || 0);
+      const subtasks = (Array.isArray(node.subtasks) ? node.subtasks : []).map(normSub);
       np.tasks.push({ id: node.id || uid(), name: String(node.name || "Sans nom"),
-                      estimate_min: est, elapsed, running: false, done: !!node.done });
+                      estimate_min: est, elapsed, running: false, done: !!node.done, subtasks });
     }
     out.projects.push(np);
   }
@@ -265,31 +285,39 @@ function migrate(raw){
 const GAP_LIMIT = 4 * 3600 * 1000;   // au-dela de 4 h d'absence, on demande confirmation
 
 function handleRecovery(parsed, st){
-  // Des timers tournaient quand l'app a ete fermee / tuee par le systeme.
+  // Des timers (taches ou sous-taches) tournaient quand l'app a ete fermee / tuee.
   // Veille d'ecran courte -> on reprend sans rien demander.
   // Longue absence -> on demande s'il faut conserver ce temps (timer oublie ?).
   try{
     const runIds = [];
-    for(const p of ((parsed && parsed.projects) || []))
-      for(const t of ((p && p.tasks) || []))
+    for(const p of ((parsed && parsed.projects) || [])){
+      for(const t of ((p && p.tasks) || [])){
         if(t && t.running && t.startedAt) runIds.push(t.id);
+        for(const sb of (Array.isArray(t && t.subtasks) ? t.subtasks : [])){
+          if(sb && sb.running && sb.startedAt) runIds.push(sb.id);
+        }
+      }
+    }
     if(!runIds.length) return st;
     const now = Date.now();
     const lastSeen = Number(parsed.lastSeen) || now;
     const gap = Math.max(0, now - lastSeen);
-    const tasks = [];
-    for(const p of st.projects) for(const t of p.tasks) if(runIds.includes(t.id)) tasks.push(t);
+    const nodes = [];
+    for(const p of st.projects) for(const t of p.tasks){
+      if(runIds.includes(t.id)) nodes.push(t);
+      for(const sb of (t.subtasks||[])) if(runIds.includes(sb.id)) nodes.push(sb);
+    }
     if(gap > GAP_LIMIT){
       const h = Math.round(gap / 3600000 * 10) / 10;
       const keep = confirm(
-        `⏱ ${tasks.length} tâche(s) tournaient encore quand l'app a été fermée, il y a environ ${String(h).replace(".", ",")} h.\n\n` +
+        `⏱ ${nodes.length} tâche(s)/sous-tâche(s) tournaient encore quand l'app a été fermée, il y a environ ${String(h).replace(".", ",")} h.\n\n` +
         `OK = conserver ce temps et continuer le chrono.\nAnnuler = retirer ce temps (timer oublié) et mettre en pause.`);
       if(!keep){
-        for(const t of tasks) t.elapsed = Math.max(0, t.elapsed - gap / 1000);
+        for(const n of nodes) n.elapsed = Math.max(0, n.elapsed - gap / 1000);
         return st;
       }
     }
-    for(const t of tasks){ t.running = true; t.startedAt = now; }
+    for(const n of nodes){ n.running = true; n.startedAt = now; }
   }catch(e){}
   return st;
 }
@@ -320,17 +348,23 @@ function save(){
 let state = load();
 let view = "tasks";
 let onlyActive = false;
-let collapsed = {};   // { [projectId]: true } = replié
+let collapsed = {};   // { [projectId]: true } = projet replié
+let openSub = {};     // { [taskId]: true } = sous-tâches dépliées (Tâches + Dashboard)
 let edit = null;
 let menuCtx = null;
 
 // ---- Temps ----
+// elapsed() est récursif : une tâche qui a des sous-tâches devient un simple
+// conteneur (aucun chrono propre) et son temps = la somme de ses sous-tâches.
+function hasSubs(t){ return Array.isArray(t.subtasks) && t.subtasks.length > 0; }
 function elapsed(n){
+  if(hasSubs(n)) return n.subtasks.reduce((a,s) => a + elapsed(s), 0);
   let e = n.elapsed || 0;
   if(n.running && n.startedAt) e += (Date.now() - n.startedAt) / 1000;
   return e;
 }
 function over(n){ return n.estimate_min > 0 && elapsed(n) > n.estimate_min * 60; }
+function taskIsRunning(t){ return hasSubs(t) ? t.subtasks.some(s => s.running) : !!t.running; }
 function hms(s){
   s = Math.max(0, Math.floor(s));
   const j = Math.floor(s/86400), h = Math.floor((s%86400)/3600),
@@ -350,17 +384,33 @@ function bestUnit(estMin){
   return { v: estMin, u: 1 };
 }
 function projTotal(p){ return p.tasks.reduce((a,t) => a + elapsed(t), 0); }
-function findTask(id){
+function countRunning(){
+  let n = 0;
+  for(const p of state.projects) for(const t of p.tasks) n += hasSubs(t) ? t.subtasks.filter(s => s.running).length : (t.running ? 1 : 0);
+  return n;
+}
+// Retrouve un noeud par id : {p, parent, node}. parent = la tâche mère si c'est
+// une sous-tâche, sinon null (parent === null signifie "tâche de premier niveau").
+function findNode(id){
   for(const p of state.projects)
-    for(const t of p.tasks) if(t.id === id) return {p, t};
+    for(const t of p.tasks){
+      if(t.id === id) return {p, parent: null, node: t};
+      for(const sb of (t.subtasks||[])) if(sb.id === id) return {p, parent: t, node: sb};
+    }
   return null;
 }
 function foldRunning(){
   const now = Date.now(); let any = false;
   for(const p of state.projects) for(const t of p.tasks){
-    if(t.running && t.startedAt){
+    if(!hasSubs(t) && t.running && t.startedAt){
       const d = (now - t.startedAt) / 1000;
-      if(d > 0){ t.elapsed += d; t.startedAt = now; any = true; }
+      if(d > 0){ t.elapsed = (t.elapsed||0) + d; t.startedAt = now; any = true; }
+    }
+    for(const sb of (t.subtasks||[])){
+      if(sb.running && sb.startedAt){
+        const d = (now - sb.startedAt) / 1000;
+        if(d > 0){ sb.elapsed = (sb.elapsed||0) + d; sb.startedAt = now; any = true; }
+      }
     }
   }
   return any;
@@ -368,22 +418,26 @@ function foldRunning(){
 
 // ---- Actions ----
 function toggle(id){
-  const f = findTask(id); if(!f || f.t.done) return;
+  const f = findNode(id); if(!f) return;
+  const n = f.node;
+  if(f.parent === null && hasSubs(n)) return;      // conteneur : pas de chrono propre
+  if(n.done || (f.parent && f.parent.done)) return; // tâche (ou sa mère) terminée
   foldRunning();
-  if(f.t.running){ f.t.running = false; delete f.t.startedAt; }
-  else { f.t.running = true; f.t.startedAt = Date.now(); }
+  if(n.running){ n.running = false; delete n.startedAt; }
+  else { n.running = true; n.startedAt = Date.now(); }
   save(); render();
 }
 function setDone(id, done){
-  const f = findTask(id); if(!f) return;
+  const f = findNode(id); if(!f) return;
   foldRunning();
-  f.t.done = done;
-  if(done){ f.t.running = false; delete f.t.startedAt; }
+  f.node.done = done;
+  if(done){ f.node.running = false; delete f.node.startedAt; }
   save(); render();
 }
-function deleteTask(id){
-  const f = findTask(id); if(!f) return;
-  f.p.tasks = f.p.tasks.filter(t => t.id !== id);
+function deleteNode(id){
+  const f = findNode(id); if(!f) return;
+  if(f.parent) f.parent.subtasks = f.parent.subtasks.filter(s => s.id !== id);
+  else f.p.tasks = f.p.tasks.filter(t => t.id !== id);
   save(); render();
 }
 function renameProject(pid){
@@ -411,9 +465,12 @@ function today(){ const d = new Date();
   return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0"); }
 function exportCsv(){
   foldRunning();
-  const rows = [["Projet","Tache","Passe (s)","Passe","Estime (min)","Terminee"]];
-  for(const p of state.projects) for(const t of p.tasks)
-    rows.push([p.name, t.name, Math.round(elapsed(t)), hms(elapsed(t)), t.estimate_min, t.done ? "oui" : "non"]);
+  const rows = [["Projet","Tache","Sous-tache","Estime (min)","Passe (s)","Passe","Terminee"]];
+  for(const p of state.projects) for(const t of p.tasks){
+    rows.push([p.name, t.name, "", t.estimate_min, Math.round(elapsed(t)), hms(elapsed(t)), t.done ? "oui" : "non"]);
+    for(const sb of (t.subtasks||[]))
+      rows.push([p.name, t.name, sb.name, sb.estimate_min, Math.round(elapsed(sb)), hms(elapsed(sb)), sb.done ? "oui" : "non"]);
+  }
   download("chronoapp-" + today() + ".csv",
     "\uFEFF" + rows.map(r => r.map(csvEscape).join(";")).join("\r\n"), "text/csv;charset=utf-8");
 }
@@ -448,6 +505,12 @@ function buildRecap(){
       if(t.estimate_min > 0) l += " / " + disp(t.estimate_min*60) + (over(t) ? "  ⚠ DÉPASSÉ" : "");
       if(t.done) l += " ✓";
       lines.push(l);
+      for(const sb of (t.subtasks||[])){
+        let sl = "     - " + sb.name + " : " + disp(elapsed(sb));
+        if(sb.estimate_min > 0) sl += " / " + disp(sb.estimate_min*60) + (over(sb) ? "  ⚠ DÉPASSÉ" : "");
+        if(sb.done) sl += " ✓";
+        lines.push(sl);
+      }
     }
     lines.push("");
   }
@@ -467,7 +530,7 @@ async function shareRecap(){
   download("chronoapp-recap-" + today() + ".txt", text);
 }
 
-// ---- Feuilles ----
+// ---- Feuille de création / édition ----
 function fillProjSelect(selected){
   const sel = document.getElementById("editProj");
   sel.innerHTML = state.projects.map(p =>
@@ -476,53 +539,84 @@ function fillProjSelect(selected){
   sel.value = selected && state.projects.some(p => p.id === selected) ? selected : (state.projects[0] ? state.projects[0].id : "__new");
   document.getElementById("newProjBlock").style.display = sel.value === "__new" ? "" : "none";
 }
-function openEdit(task){
-  edit = task ? {kind:"edit", id:task.id} : {kind:"new"};
-  document.getElementById("editTitle").textContent = task ? "Modifier la tâche" : "Nouvelle tâche";
-  document.getElementById("editName").value = task ? task.name : "";
+function openEditSheet(opts){
+  document.getElementById("editTitle").textContent = opts.title;
+  document.getElementById("editName").value = opts.name;
   document.getElementById("newProjName").value = "";
-  const f = task ? findTask(task.id) : null;
-  fillProjSelect(f ? f.p.id : null);
-  const b = bestUnit(task ? task.estimate_min : 0);
+  document.getElementById("editProjGroup").style.display = opts.showProject ? "" : "none";
+  if(opts.showProject) fillProjSelect(opts.projectId || null);
+  const b = bestUnit(opts.estMin || 0);
   document.getElementById("editEst").value = b.v;
   document.getElementById("editUnit").value = String(b.u);
   document.getElementById("editScrim").classList.add("show");
   setTimeout(() => document.getElementById("editName").focus(), 60);
+}
+function openNewTask(){
+  edit = {kind:"new"};
+  openEditSheet({title:"Nouvelle tâche", name:"", estMin:0, showProject:true});
+}
+function openNewSubtask(taskId){
+  edit = {kind:"newsub", taskId};
+  openEditSheet({title:"Nouvelle sous-tâche", name:"", estMin:0, showProject:false});
+}
+function openEditNode(id){
+  const f = findNode(id); if(!f) return;
+  if(f.parent){
+    edit = {kind:"editsub", id};
+    openEditSheet({title:"Modifier la sous-tâche", name:f.node.name, estMin:f.node.estimate_min, showProject:false});
+  } else {
+    edit = {kind:"edit", id};
+    openEditSheet({title:"Modifier la tâche", name:f.node.name, estMin:f.node.estimate_min, showProject:true, projectId:f.p.id});
+  }
 }
 function closeEdit(){ document.getElementById("editScrim").classList.remove("show"); edit = null; }
 function commitEdit(){
   if(!edit) return;
   const name = document.getElementById("editName").value.trim();
   if(!name){ document.getElementById("editName").focus(); return; }
-  let pid = document.getElementById("editProj").value;
-  if(pid === "__new"){
-    const pn = document.getElementById("newProjName").value.trim();
-    if(!pn){ document.getElementById("newProjName").focus(); return; }
-    const p = {id: uid(), name: pn, tasks: []};
-    state.projects.push(p); pid = p.id;
-  }
   const val = parseFloat(document.getElementById("editEst").value);
   const unit = parseInt(document.getElementById("editUnit").value, 10);
   const est = (val >= 0) ? Math.round(val * unit) : 0;
-  const dest = state.projects.find(p => p.id === pid);
 
-  if(edit.kind === "new"){
-    dest.tasks.push({id: uid(), name, estimate_min: est, elapsed: 0, running: false, done: false});
-  } else {
-    const f = findTask(edit.id);
-    if(f){
-      f.t.name = name; f.t.estimate_min = est;
-      if(f.p.id !== pid){ f.p.tasks = f.p.tasks.filter(t => t.id !== f.t.id); dest.tasks.push(f.t); }
+  if(edit.kind === "new" || edit.kind === "edit"){
+    let pid = document.getElementById("editProj").value;
+    if(pid === "__new"){
+      const pn = document.getElementById("newProjName").value.trim();
+      if(!pn){ document.getElementById("newProjName").focus(); return; }
+      const p = {id: uid(), name: pn, tasks: []};
+      state.projects.push(p); pid = p.id;
     }
+    const dest = state.projects.find(p => p.id === pid);
+    if(edit.kind === "new"){
+      dest.tasks.push({id: uid(), name, estimate_min: est, elapsed: 0, running: false, done: false, subtasks: []});
+    } else {
+      const f = findNode(edit.id);
+      if(f && !f.parent){
+        f.node.name = name; f.node.estimate_min = est;
+        if(f.p.id !== pid){ f.p.tasks = f.p.tasks.filter(t => t.id !== f.node.id); dest.tasks.push(f.node); }
+      }
+    }
+  } else if(edit.kind === "newsub"){
+    const f = findNode(edit.taskId);
+    if(f && !f.parent){
+      (f.node.subtasks = f.node.subtasks || []).push({id: uid(), name, estimate_min: est, elapsed: 0, running: false, done: false});
+      openSub[f.node.id] = true;
+    }
+  } else if(edit.kind === "editsub"){
+    const f = findNode(edit.id);
+    if(f && f.parent){ f.node.name = name; f.node.estimate_min = est; }
   }
   closeEdit(); save(); render();
 }
 function openMenu(id){
-  const f = findTask(id); if(!f) return;
+  const f = findNode(id); if(!f) return;
   menuCtx = id;
-  document.getElementById("menuTitle").textContent = f.t.name;
+  const isSub = !!f.parent;
+  document.getElementById("menuTitle").textContent = f.node.name;
+  document.getElementById("miAddSub").style.display = isSub ? "none" : "";
+  document.getElementById("miDelete").textContent = isSub ? "Supprimer la sous-tâche" : "Supprimer la tâche";
   document.getElementById("menuScrim").classList.add("show");
-  setTimeout(() => document.getElementById("miEdit").focus(), 60);
+  setTimeout(() => document.getElementById(isSub ? "miEdit" : "miAddSub").focus(), 60);
 }
 function closeMenu(){ document.getElementById("menuScrim").classList.remove("show"); menuCtx = null; }
 
@@ -542,26 +636,62 @@ function closeSidebar(){
 // ---- Rendu ----
 function escapeHtml(s){ return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-function taskRow(t){
+function subRow(s, parentDone){
+  const el = elapsed(s), ov = over(s);
+  const pct = s.estimate_min > 0 ? Math.min(100, (el/(s.estimate_min*60))*100) : 0;
+  return `<div class="row sub ${s.running?'running':''} ${s.done?'done':''}">
+    <input type="checkbox" class="chk" data-done="${s.id}" ${s.done?'checked':''}
+      aria-label="Marquer ${escapeHtml(s.name)} comme ${s.done?'à faire':'terminée'}" />
+    <div class="meta">
+      <div class="name">${escapeHtml(s.name)}</div>
+      <div class="time">
+        ${s.running?'<span class="reclight" aria-hidden="true"></span>':''}
+        <span class="val mono">${disp(el)}</span>
+        ${s.estimate_min>0?`<span class="mono">/ ${disp(s.estimate_min*60)}</span>`:''}
+        ${ov?'<span class="over-flag">DÉPASSÉ</span>':''}
+      </div>
+      ${s.estimate_min>0?`<div class="bar ${ov?'over':''}"><i style="width:${pct}%"></i></div>`:''}
+    </div>
+    <button class="play ${s.running?'on':''}" data-toggle="${s.id}" ${(s.done||parentDone)?'disabled':''}
+      aria-label="${s.running?'Mettre en pause':'Démarrer'} ${escapeHtml(s.name)}" aria-pressed="${s.running}">${s.running?'❚❚':'▶'}</button>
+    <button class="kebab" data-menu="${s.id}" aria-label="Options pour ${escapeHtml(s.name)}">⋮</button>
+  </div>`;
+}
+
+function taskRow(t, activeOnly){
+  const withSubs = hasSubs(t);
   const el = elapsed(t), ov = over(t);
   const pct = t.estimate_min > 0 ? Math.min(100, (el/(t.estimate_min*60))*100) : 0;
-  return `<div class="row ${t.running?'running':''} ${t.done?'done':''}">
+  const running = taskIsRunning(t);
+  const open = activeOnly ? true : !!openSub[t.id];
+  const caret = withSubs
+    ? `<button class="tcaret ${open?'open':''}" data-subcaret="${t.id}"
+         aria-expanded="${open}" aria-label="${open?'Replier':'Déplier'} les sous-tâches de ${escapeHtml(t.name)}">▶</button>`
+    : '';
+  let html = `<div class="row ${running?'running':''} ${t.done?'done':''}">
+    ${caret}
     <input type="checkbox" class="chk" data-done="${t.id}" ${t.done?'checked':''}
       aria-label="Marquer ${escapeHtml(t.name)} comme ${t.done?'à faire':'terminée'}" />
     <div class="meta">
-      <div class="name">${escapeHtml(t.name)}</div>
+      <div class="name">${escapeHtml(t.name)}${withSubs?`<span class="subcount"> · ${t.subtasks.length} sous-tâche${t.subtasks.length>1?'s':''}</span>`:''}</div>
       <div class="time">
-        ${t.running?'<span class="reclight" aria-hidden="true"></span>':''}
+        ${running?'<span class="reclight" aria-hidden="true"></span>':''}
         <span class="val mono">${disp(el)}</span>
         ${t.estimate_min>0?`<span class="mono">/ ${disp(t.estimate_min*60)}</span>`:''}
         ${ov?'<span class="over-flag">DÉPASSÉ</span>':''}
       </div>
       ${t.estimate_min>0?`<div class="bar ${ov?'over':''}"><i style="width:${pct}%"></i></div>`:''}
     </div>
-    <button class="play ${t.running?'on':''}" data-toggle="${t.id}" ${t.done?'disabled':''}
-      aria-label="${t.running?'Mettre en pause':'Démarrer'} ${escapeHtml(t.name)}" aria-pressed="${t.running}">${t.running?'❚❚':'▶'}</button>
+    <button class="play ${running?'on':''}" data-toggle="${t.id}" ${(t.done||withSubs)?'disabled':''}
+      aria-label="${withSubs?'Groupe de tâches, ouvre pour démarrer une sous-tâche':(running?'Mettre en pause':'Démarrer')+' '+escapeHtml(t.name)}"
+      aria-pressed="${running}">${withSubs?'▤':(running?'❚❚':'▶')}</button>
     <button class="kebab" data-menu="${t.id}" aria-label="Options pour ${escapeHtml(t.name)}">⋮</button>
   </div>`;
+  if(withSubs && open){
+    const subs = activeOnly ? t.subtasks.filter(s => s.running) : t.subtasks;
+    html += subs.map(s => subRow(s, t.done)).join("");
+  }
+  return html;
 }
 
 function render(){
@@ -585,6 +715,9 @@ function render(){
 
   if(view === "dash"){
     // ---- Dashboard : consommation du budget par projet et par tâche ----
+    // elapsed() est récursif : une tâche-conteneur affiche déjà la somme de ses
+    // sous-tâches sans rien changer à la structure. Le détail par sous-tâche
+    // n'apparaît que si on déplie volontairement une tâche.
     const groups = state.projects
       .map(p => ({p, tot: projTotal(p), est: p.tasks.reduce((a,t) => a + t.estimate_min*60, 0)}))
       .sort((a,b) => b.tot - a.tot);
@@ -592,17 +725,14 @@ function render(){
     if(!groups.length || grand < 1){
       list.innerHTML = `<div class="empty"><b>Rien à afficher.</b><br>Chronomètre des tâches pour alimenter le dashboard.</div>`;
     } else {
-      // Barre budget : l'estimation = 100 % de la largeur. Le % et l'écart sont déjà
-      // affichés sur la ligne d'en-tête de la tâche : la barre reste un pur repère visuel.
       const budgetBar = (el, est) => {
         const pct = Math.min(100, el/est*100);
         const cls = el > est ? "over" : (el/est >= 0.75 ? "warn" : "ok");
         return `<div class="gbar"><i class="${cls}" style="width:${pct.toFixed(1)}%"></i></div>`;
       };
-      // Barre relative (pas d'estimation) : comparée au plus long du groupe
       const relBar = (el, ref) => `<div class="gbar"><i class="rel" style="width:${Math.max(1, el/Math.max(1,ref)*100).toFixed(1)}%"></i></div>`;
 
-      const gGroups = onlyActive ? groups.filter(g => g.p.tasks.some(t => t.running)) : groups;
+      const gGroups = onlyActive ? groups.filter(g => g.p.tasks.some(t => taskIsRunning(t))) : groups;
       list.innerHTML =
         `<div class="gtotal"><span class="k">Total suivi</span><span class="v mono">${disp(grand)}</span></div>
          <div class="glegend">Barre = part de l'estimation utilisée · vert &lt; 75 % · ambre 75-100 % · <b>rouge = dépassé</b>
@@ -610,7 +740,7 @@ function render(){
         (!gGroups.length ? `<div class="empty">Rien d'actif en ce moment.</div>` : gGroups.map(g => {
           const closed = !!collapsed[g.p.id];
           const tasksAll = [...g.p.tasks].sort((a,b) => elapsed(b) - elapsed(a));
-          const tasks = onlyActive ? tasksAll.filter(t => t.running) : tasksAll;
+          const tasks = onlyActive ? tasksAll.filter(t => taskIsRunning(t)) : tasksAll;
           const maxTask = Math.max(1, ...g.p.tasks.map(t => elapsed(t)));
           const dOver = g.est > 0 && g.tot > g.est;
           return `<section aria-label="Projet ${escapeHtml(g.p.name)}"><div class="card">
@@ -625,10 +755,24 @@ function render(){
             : `<div class="gsub mono">pas d'estimation sur ce projet</div>`}
             ${tasks.length ? tasks.map(t => {
               const el = elapsed(t);
+              const tOpen = onlyActive ? true : !!openSub[t.id];
+              const tSubs = hasSubs(t) ? (onlyActive ? t.subtasks.filter(s => s.running) : t.subtasks) : [];
+              const gcaret = hasSubs(t)
+                ? `<button class="gcaret ${tOpen?'open':''}" data-subcaret="${t.id}"
+                     aria-expanded="${tOpen}" aria-label="${tOpen?'Replier':'Déplier'} les sous-tâches de ${escapeHtml(t.name)}">▶</button>`
+                : '';
               return `<div class="gtask ${t.done?'done':''}">
-                <div class="gline"><span class="tname">${escapeHtml(t.name)}${t.done?' ✓':''}</span>
+                <div class="gline"><span class="tname">${gcaret}<span>${escapeHtml(t.name)}${t.done?' ✓':''}</span></span>
                   <span class="ttime mono">${disp(el)}${t.estimate_min>0?` / ${disp(t.estimate_min*60)}`:''}${over(t)?` <span class="neg">+${disp(el-t.estimate_min*60)}</span>`:''}</span></div>
                 ${t.estimate_min > 0 ? budgetBar(el, t.estimate_min*60) : relBar(el, maxTask)}
+                ${hasSubs(t) && tOpen ? tSubs.map(sb => {
+                  const sel = elapsed(sb);
+                  return `<div class="gtask gsubtask ${sb.done?'done':''}">
+                    <div class="gline"><span class="tname">${escapeHtml(sb.name)}${sb.done?' ✓':''}</span>
+                      <span class="ttime mono">${disp(sel)}${sb.estimate_min>0?` / ${disp(sb.estimate_min*60)}`:''}${over(sb)?` <span class="neg">+${disp(sel-sb.estimate_min*60)}</span>`:''}</span></div>
+                    ${sb.estimate_min > 0 ? budgetBar(sel, sb.estimate_min*60) : relBar(sel, maxTask)}
+                  </div>`;
+                }).join("") : ''}
               </div>`;
             }).join("") : (onlyActive ? `<div class="empty">Aucune tâche active dans ce projet.</div>` : '')}
             `}
@@ -640,7 +784,7 @@ function render(){
     if(!state.projects.length){
       list.innerHTML = `<div class="empty"><b>Aucune tâche.</b><br>Touche « + Tâche » : tu pourras créer le projet en même temps.</div>`;
     } else {
-      const shown = onlyActive ? state.projects.filter(p => p.tasks.some(t => t.running)) : state.projects;
+      const shown = onlyActive ? state.projects.filter(p => p.tasks.some(t => taskIsRunning(t))) : state.projects;
       if(!shown.length){
         list.innerHTML = `<div class="empty"><b>Rien d'actif en ce moment.</b><br>Touche à nouveau le bandeau en haut pour tout réafficher.</div>`;
       } else {
@@ -649,7 +793,7 @@ function render(){
              <button class="icon-btn" id="clearFilter" style="width:auto;padding:4px 8px">tout afficher</button></div>` : '') +
           shown.map(p => {
             const closed = !!collapsed[p.id];
-            const tasksToShow = onlyActive ? p.tasks.filter(t => t.running) : p.tasks;
+            const tasksToShow = onlyActive ? p.tasks.filter(t => taskIsRunning(t)) : p.tasks;
             const tot = projTotal(p);
             return `<section aria-label="Projet ${escapeHtml(p.name)}">
               <h2 class="group-h">
@@ -660,7 +804,7 @@ function render(){
                 <button class="icon-btn" data-renameproj="${p.id}" aria-label="Renommer ${escapeHtml(p.name)}">✎</button>
                 <button class="icon-btn" data-delproj="${p.id}" aria-label="Supprimer ${escapeHtml(p.name)}" style="color:var(--red)">🗑</button>
               </h2>
-              ${closed ? '' : `<div class="card">${tasksToShow.length ? tasksToShow.map(taskRow).join("") :
+              ${closed ? '' : `<div class="card">${tasksToShow.length ? tasksToShow.map(t => taskRow(t, onlyActive)).join("") :
                 `<div class="empty">${onlyActive ? "Aucune tâche active dans ce projet." : "Pas encore de tâche."}</div>`}</div>`}
             </section>`;
           }).join("");
@@ -668,28 +812,28 @@ function render(){
     }
   }
 
-  const running = state.projects.flatMap(p => p.tasks).filter(t => t.running);
+  const running = countRunning();
   const pill = document.getElementById("pill");
-  pill.className = "active-pill" + (running.length ? " live" : "");
+  pill.className = "active-pill" + (running ? " live" : "");
   pill.setAttribute("aria-pressed", String(onlyActive));
-  pill.textContent = `${running.length} active${running.length>1?'s':''}`;
-  pill.title = running.length ? "Afficher seulement les projets/tâches actifs" : "Aucune tâche active";
+  pill.textContent = `${running} active${running>1?'s':''}`;
+  pill.title = running ? "Afficher seulement les projets/tâches actifs" : "Aucune tâche active";
 }
 
 // ---- Événements ----
 document.addEventListener("click", (e) => {
-  const t = e.target.closest("[data-toggle],[data-menu],[data-renameproj],[data-delproj],[data-collapse],#clearFilter");
+  const t = e.target.closest("[data-toggle],[data-menu],[data-renameproj],[data-delproj],[data-collapse],[data-subcaret],#clearFilter");
   if(!t) return;
   if(t.dataset.toggle) toggle(t.dataset.toggle);
   else if(t.dataset.menu) openMenu(t.dataset.menu);
   else if(t.dataset.renameproj) renameProject(t.dataset.renameproj);
   else if(t.dataset.delproj) deleteProject(t.dataset.delproj);
   else if(t.dataset.collapse){ collapsed[t.dataset.collapse] = !collapsed[t.dataset.collapse]; render(); }
+  else if(t.dataset.subcaret){ openSub[t.dataset.subcaret] = !openSub[t.dataset.subcaret]; render(); }
   else if(t.id === "clearFilter"){ onlyActive = false; render(); }
 });
 document.getElementById("pill").addEventListener("click", () => {
-  const running = state.projects.some(p => p.tasks.some(t => t.running));
-  if(!running && !onlyActive) return;
+  if(!countRunning() && !onlyActive) return;
   onlyActive = !onlyActive;
   if(onlyActive) view = "tasks";
   render();
@@ -702,7 +846,7 @@ document.getElementById("menuBtn").onclick = () =>
 document.getElementById("sidebarScrim").onclick = closeSidebar;
 document.getElementById("tabTasks").onclick = () => { view = "tasks"; render(); };
 document.getElementById("tabDash").onclick  = () => { view = "dash"; render(); };
-document.getElementById("fab").onclick = () => openEdit(null);
+document.getElementById("fab").onclick = openNewTask;
 
 document.getElementById("setTheme").onclick = () => {
   state.settings.theme = state.settings.theme === "dark" ? "light" : "dark"; save(); render(); };
@@ -729,13 +873,25 @@ document.getElementById("editScrim").addEventListener("click", (e)=>{ if(e.targe
 for(const id of ["editName","newProjName","editEst"])
   document.getElementById(id).addEventListener("keydown", (e)=>{ if(e.key==="Enter") commitEdit(); });
 
-document.getElementById("miEdit").onclick   = () => { const id=menuCtx; closeMenu();
-  const f=findTask(id); if(f) openEdit(f.t); };
+document.getElementById("miAddSub").onclick = () => { const id=menuCtx; closeMenu(); openNewSubtask(id); };
+document.getElementById("miEdit").onclick   = () => { const id=menuCtx; closeMenu(); openEditNode(id); };
 document.getElementById("miReset").onclick  = () => { const id=menuCtx; closeMenu();
-  if(confirm("Remettre le compteur à zéro ?")){ const f=findTask(id);
-    if(f){ f.t.elapsed=0; f.t.running=false; delete f.t.startedAt; save(); render(); } } };
-document.getElementById("miDelete").onclick = () => { const id=menuCtx; const f=findTask(id); closeMenu();
-  if(confirm(`Supprimer « ${f?f.t.name:''} » ?`)) deleteTask(id); };
+  const f = findNode(id); if(!f) return;
+  const container = !f.parent && hasSubs(f.node);
+  const msg = container ? `Remettre à zéro les ${f.node.subtasks.length} sous-tâche(s) de « ${f.node.name} » ?`
+                         : "Remettre le compteur à zéro ?";
+  if(confirm(msg)){
+    if(container){ for(const sb of f.node.subtasks){ sb.elapsed=0; sb.running=false; delete sb.startedAt; } }
+    else { f.node.elapsed=0; f.node.running=false; delete f.node.startedAt; }
+    save(); render();
+  }
+};
+document.getElementById("miDelete").onclick = () => { const id=menuCtx; const f=findNode(id); closeMenu();
+  if(!f) return;
+  const container = !f.parent && hasSubs(f.node);
+  const label = container ? `« ${f.node.name} » et ses ${f.node.subtasks.length} sous-tâche(s)` : `« ${f.node.name} »`;
+  if(confirm(`Supprimer ${label} ?`)) deleteNode(id);
+};
 document.getElementById("miClose").onclick  = closeMenu;
 document.getElementById("menuScrim").addEventListener("click",(e)=>{ if(e.target.id==="menuScrim") closeMenu(); });
 
@@ -745,7 +901,7 @@ document.addEventListener("keydown", (e) => {
 
 // ---- Wake Lock : ecran maintenu allume si demande et timer actif ----
 let wakeLock = null;
-function anyRunning(){ return state.projects.some(p => p.tasks.some(t => t.running)); }
+function anyRunning(){ return countRunning() > 0; }
 async function updateWakeLock(){
   const want = state.settings.keepAwake && anyRunning() &&
                typeof document !== "undefined" && document.visibilityState === "visible";
@@ -766,7 +922,7 @@ setInterval(() => { if(foldRunning()){ save(); render(); } }, 1000);
 // ---- Fermeture ----
 window.addEventListener("beforeunload", (e) => {
   foldRunning(); save();
-  if(state.projects.some(p => p.tasks.some(t => t.running))){
+  if(countRunning() > 0){
     e.preventDefault();
     e.returnValue = "Des tâches sont encore actives. Quitter ?";
     return e.returnValue;
