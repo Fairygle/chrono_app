@@ -37,7 +37,8 @@
   header h1{font-size:19px;margin:0;letter-spacing:.14em;text-transform:uppercase;font-weight:700;flex:1}
   header h1 .dot{color:var(--amber)}
   .active-pill{font-size:12px;color:var(--muted);border:1px solid var(--line);
-    padding:6px 11px;white-space:nowrap;background:var(--surface)}
+    padding:6px 11px;white-space:nowrap;background:var(--surface);min-height:34px}
+  .active-pill[aria-pressed="true"]{background:var(--teal);color:#fff;border-color:var(--teal)}
   .active-pill.live{color:var(--amber);border-color:var(--amber)}
 
   /* Sidebar : réglages uniquement */
@@ -66,6 +67,9 @@
   .group-h{font-size:13px;color:var(--teal);text-transform:uppercase;letter-spacing:.12em;
     margin:16px 2px 8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
   .group-h .tot{color:var(--muted);text-transform:none;letter-spacing:0}
+  .collapse-btn{width:26px;height:26px;flex:0 0 auto;background:var(--surface);border:1px solid var(--line);
+    font-size:11px;transition:transform .12s}
+  .collapse-btn.open{transform:rotate(90deg)}
   .icon-btn{width:34px;height:34px;background:var(--surface);border:1px solid var(--line);font-size:13px}
 
   .card{background:var(--surface);border:1px solid var(--line);margin-bottom:10px;overflow:hidden}
@@ -158,7 +162,7 @@
 <header>
   <button id="menuBtn" aria-label="Ouvrir les paramètres" aria-expanded="false" aria-controls="sidebar">☰</button>
   <h1>Chrono<span class="dot">·</span>App</h1>
-  <div id="pill" class="active-pill" role="status" aria-live="polite">0 active</div>
+  <button id="pill" class="active-pill" aria-pressed="false">0 active</button>
 </header>
 
 <div id="sidebarScrim"></div>
@@ -316,6 +320,8 @@ function save(){
 
 let state = load();
 let view = "tasks";
+let onlyActive = false;
+let collapsed = {};   // { [projectId]: true } = replié
 let edit = null;
 let menuCtx = null;
 
@@ -597,67 +603,100 @@ function render(){
       // Barre relative (pas d'estimation) : comparée au plus long du groupe
       const relBar = (el, ref) => `<div class="gbar"><i class="rel" style="width:${Math.max(1, el/Math.max(1,ref)*100).toFixed(1)}%"></i></div>`;
 
+      const gGroups = onlyActive ? groups.filter(g => g.p.tasks.some(t => t.running)) : groups;
       list.innerHTML =
         `<div class="gtotal"><span class="k">Total suivi</span><span class="v mono">${disp(grand)}</span></div>
          <div class="glegend">La barre montre la part de l'estimation consommée :
            vert &lt; 75 % · ambre 75-100 % · <b>rouge = dépassé</b> (écart affiché).
-           Sans estimation, la barre compare simplement les durées entre elles.</div>` +
-        groups.map(g => {
-          const tasks = [...g.p.tasks].sort((a,b) => elapsed(b) - elapsed(a));
+           Sans estimation, la barre compare simplement les durées entre elles.
+           ${onlyActive ? ` · Filtre actif : <button class="icon-btn" id="clearFilter" style="width:auto;padding:4px 8px">tout afficher</button>` : ''}</div>` +
+        (!gGroups.length ? `<div class="empty">Rien d'actif en ce moment.</div>` : gGroups.map(g => {
+          const closed = !!collapsed[g.p.id];
+          const tasksAll = [...g.p.tasks].sort((a,b) => elapsed(b) - elapsed(a));
+          const tasks = onlyActive ? tasksAll.filter(t => t.running) : tasksAll;
           const maxTask = Math.max(1, ...g.p.tasks.map(t => elapsed(t)));
           const dOver = g.est > 0 && g.tot > g.est;
           return `<section aria-label="Projet ${escapeHtml(g.p.name)}"><div class="card">
-            <div class="ghead"><span class="gname">${escapeHtml(g.p.name)}</span>
+            <div class="ghead">
+              <button class="collapse-btn ${closed?'':'open'}" data-collapse="${g.p.id}"
+                aria-expanded="${!closed}" aria-label="${closed?'Déplier':'Replier'} ${escapeHtml(g.p.name)}">▶</button>
+              <span class="gname" style="flex:1">${escapeHtml(g.p.name)}</span>
               <span class="gtot mono">${disp(g.tot)}</span></div>
+            ${closed ? '' : `
             ${g.est > 0 ? `<div class="gsub mono">estimé ${disp(g.est)} · écart
                 <span class="${dOver?'neg':'pos'}">${(g.tot>=g.est?'+':'-') + disp(Math.abs(g.tot-g.est))}</span></div>
               <div class="gproj-bar">${budgetBar(g.tot, g.est, true)}</div>`
             : `<div class="gproj-bar">${relBar(g.tot, Math.max(1, groups[0].tot))}</div>`}
-            ${tasks.map(t => {
+            ${tasks.length ? tasks.map(t => {
               const el = elapsed(t);
               return `<div class="gtask ${t.done?'done':''}">
                 <div class="gline"><span class="tname">${escapeHtml(t.name)}${t.done?' ✓':''}</span>
                   <span class="ttime mono">${disp(el)}${t.estimate_min>0?` / ${disp(t.estimate_min*60)}`:''}${over(t)?` <span class="neg">+${disp(el-t.estimate_min*60)}</span>`:''}</span></div>
                 ${t.estimate_min > 0 ? budgetBar(el, t.estimate_min*60) : relBar(el, maxTask)}
               </div>`;
-            }).join("")}
+            }).join("") : (onlyActive ? `<div class="empty">Aucune tâche active dans ce projet.</div>` : '')}
+            `}
           </div></section>`;
-        }).join("");
+        }).join(""));
     }
   } else {
-    // ---- Tâches groupées par projet ----
+    // ---- Tâches groupées par projet (pliables, filtrables sur "actives") ----
     if(!state.projects.length){
       list.innerHTML = `<div class="empty"><b>Aucune tâche.</b><br>Touche « + Tâche » : tu pourras créer le projet en même temps.</div>`;
     } else {
-      list.innerHTML = state.projects.map(p => {
-        const tot = projTotal(p);
-        return `<section aria-label="Projet ${escapeHtml(p.name)}">
-          <h2 class="group-h">${escapeHtml(p.name)}
-            <span class="tot mono">· ${disp(tot)}</span>
-            <button class="icon-btn" data-renameproj="${p.id}" aria-label="Renommer ${escapeHtml(p.name)}">✎</button>
-            <button class="icon-btn" data-delproj="${p.id}" aria-label="Supprimer ${escapeHtml(p.name)}" style="color:var(--red)">🗑</button>
-          </h2>
-          <div class="card">${p.tasks.length ? p.tasks.map(taskRow).join("") :
-            `<div class="empty">Pas encore de tâche.</div>`}</div>
-        </section>`;
-      }).join("");
+      const shown = onlyActive ? state.projects.filter(p => p.tasks.some(t => t.running)) : state.projects;
+      if(!shown.length){
+        list.innerHTML = `<div class="empty"><b>Rien d'actif en ce moment.</b><br>Touche à nouveau le bandeau en haut pour tout réafficher.</div>`;
+      } else {
+        list.innerHTML =
+          (onlyActive ? `<div class="glegend">Filtre actif : seuls les projets avec une tâche en cours sont affichés ·
+             <button class="icon-btn" id="clearFilter" style="width:auto;padding:4px 8px">tout afficher</button></div>` : '') +
+          shown.map(p => {
+            const closed = !!collapsed[p.id];
+            const tasksToShow = onlyActive ? p.tasks.filter(t => t.running) : p.tasks;
+            const tot = projTotal(p);
+            return `<section aria-label="Projet ${escapeHtml(p.name)}">
+              <h2 class="group-h">
+                <button class="collapse-btn ${closed?'':'open'}" data-collapse="${p.id}"
+                  aria-expanded="${!closed}" aria-label="${closed?'Déplier':'Replier'} ${escapeHtml(p.name)}">▶</button>
+                <span style="flex:1;min-width:0;overflow-wrap:anywhere">${escapeHtml(p.name)}</span>
+                <span class="tot mono">· ${disp(tot)}</span>
+                <button class="icon-btn" data-renameproj="${p.id}" aria-label="Renommer ${escapeHtml(p.name)}">✎</button>
+                <button class="icon-btn" data-delproj="${p.id}" aria-label="Supprimer ${escapeHtml(p.name)}" style="color:var(--red)">🗑</button>
+              </h2>
+              ${closed ? '' : `<div class="card">${tasksToShow.length ? tasksToShow.map(taskRow).join("") :
+                `<div class="empty">${onlyActive ? "Aucune tâche active dans ce projet." : "Pas encore de tâche."}</div>`}</div>`}
+            </section>`;
+          }).join("");
+      }
     }
   }
 
   const running = state.projects.flatMap(p => p.tasks).filter(t => t.running);
   const pill = document.getElementById("pill");
   pill.className = "active-pill" + (running.length ? " live" : "");
+  pill.setAttribute("aria-pressed", String(onlyActive));
   pill.textContent = `${running.length} active${running.length>1?'s':''}`;
+  pill.title = running.length ? "Afficher seulement les projets/tâches actifs" : "Aucune tâche active";
 }
 
 // ---- Événements ----
 document.addEventListener("click", (e) => {
-  const t = e.target.closest("[data-toggle],[data-menu],[data-renameproj],[data-delproj]");
+  const t = e.target.closest("[data-toggle],[data-menu],[data-renameproj],[data-delproj],[data-collapse],#clearFilter");
   if(!t) return;
   if(t.dataset.toggle) toggle(t.dataset.toggle);
   else if(t.dataset.menu) openMenu(t.dataset.menu);
   else if(t.dataset.renameproj) renameProject(t.dataset.renameproj);
   else if(t.dataset.delproj) deleteProject(t.dataset.delproj);
+  else if(t.dataset.collapse){ collapsed[t.dataset.collapse] = !collapsed[t.dataset.collapse]; render(); }
+  else if(t.id === "clearFilter"){ onlyActive = false; render(); }
+});
+document.getElementById("pill").addEventListener("click", () => {
+  const running = state.projects.some(p => p.tasks.some(t => t.running));
+  if(!running && !onlyActive) return;
+  onlyActive = !onlyActive;
+  if(onlyActive) view = "tasks";
+  render();
 });
 document.addEventListener("change", (e) => {
   if(e.target.matches("[data-done]")) setDone(e.target.dataset.done, e.target.checked);
