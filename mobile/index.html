@@ -114,19 +114,18 @@
   .gsub .pos{color:var(--teal);font-weight:700}
   .gdot{width:8px;height:8px;flex:0 0 auto;background:var(--line)}
   .gdot.ok{background:var(--ok,var(--teal))} .gdot.warn{background:var(--amber)} .gdot.bad{background:var(--red)}
-  .gtask{padding:9px 12px 10px;border-top:1px solid var(--line)}
+  .gtask{padding:7px 12px 8px;border-top:1px solid var(--line)}
   .gline{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
   .tname{font-size:14px;font-weight:600;min-width:0;overflow-wrap:anywhere}
   .gtask.done .tname{text-decoration:line-through;color:var(--muted)}
   .ttime{font-size:11px;color:var(--muted);flex:0 0 auto}
   .ttime .neg{color:var(--red);font-weight:700}
-  .gbar{height:12px;background:var(--surface2);position:relative;margin-top:6px}
+  .gbar{height:8px;background:var(--surface2);position:relative;margin-top:5px}
   .gbar > i{position:absolute;left:0;top:0;bottom:0;min-width:2px}
   .gbar > i.ok{background:var(--teal)}
   .gbar > i.warn{background:var(--amber)}
   .gbar > i.over{background:var(--red)}
   .gbar > i.rel{background:var(--teal);opacity:.55}
-  .gpct{font-size:10px;color:var(--muted);margin-top:3px}
   .glegend{font-size:11px;color:var(--muted);margin:0 2px 12px;line-height:1.5}
   .glegend b{color:var(--red)}
 
@@ -593,12 +592,12 @@ function render(){
     if(!groups.length || grand < 1){
       list.innerHTML = `<div class="empty"><b>Rien à afficher.</b><br>Chronomètre des tâches pour alimenter le dashboard.</div>`;
     } else {
-      // Barre budget : l'estimation = 100 % de la largeur
-      const budgetBar = (el, est, big) => {
+      // Barre budget : l'estimation = 100 % de la largeur. Le % et l'écart sont déjà
+      // affichés sur la ligne d'en-tête de la tâche : la barre reste un pur repère visuel.
+      const budgetBar = (el, est) => {
         const pct = Math.min(100, el/est*100);
         const cls = el > est ? "over" : (el/est >= 0.75 ? "warn" : "ok");
-        return `<div class="gbar"><i class="${cls}" style="width:${pct.toFixed(1)}%"></i></div>
-                <div class="gpct mono">${Math.round(el/est*100)} % de l'estimation${el>est?` — <span style="color:var(--red);font-weight:700">dépassée de ${disp(el-est)}</span>`:''}</div>`;
+        return `<div class="gbar"><i class="${cls}" style="width:${pct.toFixed(1)}%"></i></div>`;
       };
       // Barre relative (pas d'estimation) : comparée au plus long du groupe
       const relBar = (el, ref) => `<div class="gbar"><i class="rel" style="width:${Math.max(1, el/Math.max(1,ref)*100).toFixed(1)}%"></i></div>`;
@@ -606,9 +605,7 @@ function render(){
       const gGroups = onlyActive ? groups.filter(g => g.p.tasks.some(t => t.running)) : groups;
       list.innerHTML =
         `<div class="gtotal"><span class="k">Total suivi</span><span class="v mono">${disp(grand)}</span></div>
-         <div class="glegend">La barre montre la part de l'estimation consommée :
-           vert &lt; 75 % · ambre 75-100 % · <b>rouge = dépassé</b> (écart affiché).
-           Sans estimation, la barre compare simplement les durées entre elles.
+         <div class="glegend">Barre = part de l'estimation utilisée · vert &lt; 75 % · ambre 75-100 % · <b>rouge = dépassé</b>
            ${onlyActive ? ` · Filtre actif : <button class="icon-btn" id="clearFilter" style="width:auto;padding:4px 8px">tout afficher</button>` : ''}</div>` +
         (!gGroups.length ? `<div class="empty">Rien d'actif en ce moment.</div>` : gGroups.map(g => {
           const closed = !!collapsed[g.p.id];
