@@ -96,21 +96,34 @@
   .empty{color:var(--muted);text-align:center;padding:44px 24px;font-size:15px;line-height:1.5}
   .empty b{color:var(--text)}
 
-  /* Gantt */
-  .grow{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--line)}
-  .grow:last-child{border-bottom:none}
-  .glabel{flex:0 0 34%;min-width:0;font-size:13px;font-weight:600;
-    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .grow.proj .glabel{color:var(--teal);text-transform:uppercase;letter-spacing:.06em;font-size:12px}
-  .grow.done .glabel{text-decoration:line-through;color:var(--muted)}
-  .gtrack{flex:1;height:16px;background:var(--surface2);position:relative}
-  .grow.proj .gtrack{height:20px}
-  .gtrack > i{position:absolute;left:0;top:0;bottom:0;background:var(--teal);min-width:2px}
-  .grow.task .gtrack > i{background:var(--amber)}
-  .gtrack > i.over{background:var(--red)}
-  .gtrack .est{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--text);opacity:.5}
-  .gtime{flex:0 0 auto;font-size:11px;color:var(--muted);min-width:62px;text-align:right}
-  .glegend{font-size:11px;color:var(--muted);margin:8px 2px 14px}
+  /* Dashboard budget */
+  .gtotal{display:flex;justify-content:space-between;align-items:center;
+    background:var(--surface);border:1px solid var(--line);padding:12px;margin-bottom:10px}
+  .gtotal .k{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+  .gtotal .v{font-size:20px;font-weight:700}
+  .ghead{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:12px 12px 2px}
+  .gname{font-size:13px;font-weight:700;color:var(--teal);text-transform:uppercase;letter-spacing:.06em;
+    min-width:0;overflow-wrap:anywhere}
+  .gtot{font-size:15px;font-weight:700;flex:0 0 auto}
+  .gsub{font-size:11px;color:var(--muted);padding:0 12px}
+  .gsub .neg{color:var(--red);font-weight:700}
+  .gsub .pos{color:var(--teal);font-weight:700}
+  .gproj-bar{margin:8px 12px 12px}
+  .gtask{padding:9px 12px 10px;border-top:1px solid var(--line)}
+  .gline{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+  .tname{font-size:14px;font-weight:600;min-width:0;overflow-wrap:anywhere}
+  .gtask.done .tname{text-decoration:line-through;color:var(--muted)}
+  .ttime{font-size:11px;color:var(--muted);flex:0 0 auto}
+  .ttime .neg{color:var(--red);font-weight:700}
+  .gbar{height:12px;background:var(--surface2);position:relative;margin-top:6px}
+  .gproj-bar .gbar{height:16px}
+  .gbar > i{position:absolute;left:0;top:0;bottom:0;min-width:2px}
+  .gbar > i.ok{background:var(--teal)}
+  .gbar > i.warn{background:var(--amber)}
+  .gbar > i.over{background:var(--red)}
+  .gbar > i.rel{background:var(--teal);opacity:.55}
+  .gpct{font-size:10px;color:var(--muted);margin-top:3px}
+  .glegend{font-size:11px;color:var(--muted);margin:0 2px 12px;line-height:1.5}
   .glegend b{color:var(--red)}
 
   .fab{position:fixed;right:14px;bottom:calc(18px + var(--safe-b));z-index:36;
@@ -566,34 +579,49 @@ function render(){
   const list = document.getElementById("list");
 
   if(view === "dash"){
-    // ---- Dashboard Gantt : temps total par projet et par tâche ----
+    // ---- Dashboard : consommation du budget par projet et par tâche ----
     const groups = state.projects
-      .map(p => ({p, tot: projTotal(p)}))
+      .map(p => ({p, tot: projTotal(p), est: p.tasks.reduce((a,t) => a + t.estimate_min*60, 0)}))
       .sort((a,b) => b.tot - a.tot);
-    const all = groups.flatMap(g => g.p.tasks.map(t => elapsed(t))).concat(groups.map(g => g.tot));
-    const max = Math.max(1, ...all);
-    if(!groups.length || max <= 1){
-      list.innerHTML = `<div class="empty"><b>Rien à afficher.</b><br>Chronomètre des tâches pour voir le Gantt.</div>`;
+    const grand = groups.reduce((a,g) => a + g.tot, 0);
+    if(!groups.length || grand < 1){
+      list.innerHTML = `<div class="empty"><b>Rien à afficher.</b><br>Chronomètre des tâches pour alimenter le dashboard.</div>`;
     } else {
+      // Barre budget : l'estimation = 100 % de la largeur
+      const budgetBar = (el, est, big) => {
+        const pct = Math.min(100, el/est*100);
+        const cls = el > est ? "over" : (el/est >= 0.75 ? "warn" : "ok");
+        return `<div class="gbar"><i class="${cls}" style="width:${pct.toFixed(1)}%"></i></div>
+                <div class="gpct mono">${Math.round(el/est*100)} % de l'estimation${el>est?` — <span style="color:var(--red);font-weight:700">dépassée de ${disp(el-est)}</span>`:''}</div>`;
+      };
+      // Barre relative (pas d'estimation) : comparée au plus long du groupe
+      const relBar = (el, ref) => `<div class="gbar"><i class="rel" style="width:${Math.max(1, el/Math.max(1,ref)*100).toFixed(1)}%"></i></div>`;
+
       list.innerHTML =
-        `<div class="glegend">Longueur des barres = temps passé · repère vertical = estimation · <b>rouge = dépassé</b></div>` +
+        `<div class="gtotal"><span class="k">Total suivi</span><span class="v mono">${disp(grand)}</span></div>
+         <div class="glegend">La barre montre la part de l'estimation consommée :
+           vert &lt; 75 % · ambre 75-100 % · <b>rouge = dépassé</b> (écart affiché).
+           Sans estimation, la barre compare simplement les durées entre elles.</div>` +
         groups.map(g => {
           const tasks = [...g.p.tasks].sort((a,b) => elapsed(b) - elapsed(a));
-          const projEst = g.p.tasks.reduce((a,t) => a + t.estimate_min*60, 0);
-          const gbar = (label, el, estSec, cls, ov) => `
-            <div class="grow ${cls}">
-              <span class="glabel">${label}</span>
-              <div class="gtrack">
-                <i class="${ov?'over':''}" style="width:${(el/max*100).toFixed(2)}%"></i>
-                ${estSec>0 && estSec<=max ? `<span class="est" style="left:${(estSec/max*100).toFixed(2)}%"></span>` : ''}
-              </div>
-              <span class="gtime mono">${disp(el)}</span>
-            </div>`;
-          return `<section aria-label="Projet ${escapeHtml(g.p.name)}"><div class="card">` +
-            gbar(escapeHtml(g.p.name), g.tot, projEst, "proj", projEst>0 && g.tot>projEst) +
-            tasks.map(t => gbar(escapeHtml(t.name) + (t.done?" ✓":""), elapsed(t), t.estimate_min*60,
-                                "task" + (t.done?" done":""), over(t))).join("") +
-            `</div></section>`;
+          const maxTask = Math.max(1, ...g.p.tasks.map(t => elapsed(t)));
+          const dOver = g.est > 0 && g.tot > g.est;
+          return `<section aria-label="Projet ${escapeHtml(g.p.name)}"><div class="card">
+            <div class="ghead"><span class="gname">${escapeHtml(g.p.name)}</span>
+              <span class="gtot mono">${disp(g.tot)}</span></div>
+            ${g.est > 0 ? `<div class="gsub mono">estimé ${disp(g.est)} · écart
+                <span class="${dOver?'neg':'pos'}">${(g.tot>=g.est?'+':'-') + disp(Math.abs(g.tot-g.est))}</span></div>
+              <div class="gproj-bar">${budgetBar(g.tot, g.est, true)}</div>`
+            : `<div class="gproj-bar">${relBar(g.tot, Math.max(1, groups[0].tot))}</div>`}
+            ${tasks.map(t => {
+              const el = elapsed(t);
+              return `<div class="gtask ${t.done?'done':''}">
+                <div class="gline"><span class="tname">${escapeHtml(t.name)}${t.done?' ✓':''}</span>
+                  <span class="ttime mono">${disp(el)}${t.estimate_min>0?` / ${disp(t.estimate_min*60)}`:''}${over(t)?` <span class="neg">+${disp(el-t.estimate_min*60)}</span>`:''}</span></div>
+                ${t.estimate_min > 0 ? budgetBar(el, t.estimate_min*60) : relBar(el, maxTask)}
+              </div>`;
+            }).join("")}
+          </div></section>`;
         }).join("");
     }
   } else {
