@@ -160,6 +160,7 @@
   <h2>Affichage</h2>
   <button class="side-btn" id="setTheme"><span>Mode sombre</span><span class="state"></span></button>
   <button class="side-btn" id="setDecimal"><span>Temps en décimal (1,25 h)</span><span class="state"></span></button>
+  <button class="side-btn" id="setAwake"><span>Écran allumé si timer actif</span><span class="state"></span></button>
 </nav>
 
 <main id="main">
@@ -223,7 +224,8 @@ function migrate(raw){
   const s = (raw && typeof raw === "object") ? raw : {};
   const out = { schema: SCHEMA, projects: [] };
   const st = (s.settings && typeof s.settings === "object") ? s.settings : {};
-  out.settings = { theme: st.theme === "dark" ? "dark" : "light", decimal: !!st.decimal };
+  out.settings = { theme: st.theme === "dark" ? "dark" : "light", decimal: !!st.decimal,
+                   keepAwake: !!st.keepAwake };
   for(const p of (Array.isArray(s.projects) ? s.projects : [])){
     const np = { id: (p && p.id) || uid(), name: String((p && p.name) || "Projet"), tasks: [] };
     for(const t of (Array.isArray(p && p.tasks) ? p.tasks : [])){
@@ -244,16 +246,60 @@ function migrate(raw){
   }
   return out;
 }
+const GAP_LIMIT = 4 * 3600 * 1000;   // au-dela de 4 h d'absence, on demande confirmation
+
+function handleRecovery(parsed, st){
+  // Des timers tournaient quand l'app a ete fermee / tuee par le systeme.
+  // Veille d'ecran courte -> on reprend sans rien demander.
+  // Longue absence -> on demande s'il faut conserver ce temps (timer oublie ?).
+  try{
+    const runIds = [];
+    for(const p of ((parsed && parsed.projects) || []))
+      for(const t of ((p && p.tasks) || []))
+        if(t && t.running && t.startedAt) runIds.push(t.id);
+    if(!runIds.length) return st;
+    const now = Date.now();
+    const lastSeen = Number(parsed.lastSeen) || now;
+    const gap = Math.max(0, now - lastSeen);
+    const tasks = [];
+    for(const p of st.projects) for(const t of p.tasks) if(runIds.includes(t.id)) tasks.push(t);
+    if(gap > GAP_LIMIT){
+      const h = Math.round(gap / 3600000 * 10) / 10;
+      const keep = confirm(
+        `⏱ ${tasks.length} tâche(s) tournaient encore quand l'app a été fermée, il y a environ ${String(h).replace(".", ",")} h.\n\n` +
+        `OK = conserver ce temps et continuer le chrono.\nAnnuler = retirer ce temps (timer oublié) et mettre en pause.`);
+      if(!keep){
+        for(const t of tasks) t.elapsed = Math.max(0, t.elapsed - gap / 1000);
+        return st;
+      }
+    }
+    for(const t of tasks){ t.running = true; t.startedAt = now; }
+  }catch(e){}
+  return st;
+}
+
 function load(){
   let raw = null;
   try{ raw = localStorage.getItem(KEY); }catch(e){}
   if(raw){
     try{ localStorage.setItem(KEY + ".backup", raw); }catch(e){}
-    try{ return migrate(JSON.parse(raw)); }catch(e){}
+    try{
+      const parsed = JSON.parse(raw);
+      return handleRecovery(parsed, migrate(parsed));
+    }catch(e){}
   }
   return migrate(null);
 }
-function save(){ try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){} }
+let saveWarned = false;
+function save(){
+  try{
+    state.lastSeen = Date.now();
+    localStorage.setItem(KEY, JSON.stringify(state));
+  }catch(e){
+    if(!saveWarned){ saveWarned = true;
+      alert("⚠ Impossible d'enregistrer les données (stockage plein ou navigation privée)."); }
+  }
+}
 
 let state = load();
 let view = "tasks";
@@ -407,7 +453,7 @@ async function shareRecap(){
 function fillProjSelect(selected){
   const sel = document.getElementById("editProj");
   sel.innerHTML = state.projects.map(p =>
-    `<option value="${p.id}">${p.name.replace(/[<>&]/g,"")}</option>`).join("") +
+    `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join("") +
     `<option value="__new">+ Nouveau projet…</option>`;
   sel.value = selected && state.projects.some(p => p.id === selected) ? selected : (state.projects[0] ? state.projects[0].id : "__new");
   document.getElementById("newProjBlock").style.display = sel.value === "__new" ? "" : "none";
@@ -511,6 +557,8 @@ function render(){
   };
   setBtn("setTheme", state.settings.theme === "dark");
   setBtn("setDecimal", state.settings.decimal);
+  setBtn("setAwake", state.settings.keepAwake);
+  updateWakeLock();
 
   document.getElementById("tabTasks").setAttribute("aria-selected", String(view === "tasks"));
   document.getElementById("tabDash").setAttribute("aria-selected", String(view === "dash"));
@@ -597,6 +645,8 @@ document.getElementById("setTheme").onclick = () => {
   state.settings.theme = state.settings.theme === "dark" ? "light" : "dark"; save(); render(); };
 document.getElementById("setDecimal").onclick = () => {
   state.settings.decimal = !state.settings.decimal; save(); render(); };
+document.getElementById("setAwake").onclick = () => {
+  state.settings.keepAwake = !state.settings.keepAwake; save(); render(); };
 document.getElementById("expCsv").onclick = exportCsv;
 document.getElementById("expJson").onclick = exportJson;
 document.getElementById("impJson").onclick = () => document.getElementById("impFile").click();
@@ -630,6 +680,23 @@ document.addEventListener("keydown", (e) => {
   if(e.key === "Escape"){ closeEdit(); closeMenu(); closeSidebar(); }
 });
 
+// ---- Wake Lock : ecran maintenu allume si demande et timer actif ----
+let wakeLock = null;
+function anyRunning(){ return state.projects.some(p => p.tasks.some(t => t.running)); }
+async function updateWakeLock(){
+  const want = state.settings.keepAwake && anyRunning() &&
+               typeof document !== "undefined" && document.visibilityState === "visible";
+  if(want && !wakeLock && navigator.wakeLock){
+    try{
+      wakeLock = await navigator.wakeLock.request("screen");
+      wakeLock.addEventListener("release", () => { wakeLock = null; });
+    }catch(e){ wakeLock = null; }
+  } else if(!want && wakeLock){
+    try{ wakeLock.release(); }catch(e){}
+    wakeLock = null;
+  }
+}
+
 // ---- Boucle 1 s ----
 setInterval(() => { if(foldRunning()){ save(); render(); } }, 1000);
 
@@ -642,7 +709,18 @@ window.addEventListener("beforeunload", (e) => {
     return e.returnValue;
   }
 });
-document.addEventListener("visibilitychange", () => { if(document.hidden){ foldRunning(); save(); } });
+document.addEventListener("visibilitychange", () => {
+  if(document.hidden){ foldRunning(); save(); }
+  else { foldRunning(); save(); render(); }   // retour au premier plan : rattraper l'affichage + wake lock
+});
+window.addEventListener("pagehide", () => { foldRunning(); save(); });   // iOS : plus fiable que beforeunload
+
+// ---- Plusieurs onglets ouverts : se resynchroniser au lieu de s'ecraser ----
+window.addEventListener("storage", (e) => {
+  if(e.key === KEY && e.newValue){
+    try{ state = migrate(JSON.parse(e.newValue)); render(); }catch(err){}
+  }
+});
 
 if("serviceWorker" in navigator && location.protocol.startsWith("http")){
   navigator.serviceWorker.register("sw.js", {updateViaCache:"none"})
