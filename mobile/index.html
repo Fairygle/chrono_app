@@ -68,9 +68,9 @@
     margin:16px 2px 8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
   .group-h .tot{color:var(--muted);text-transform:none;letter-spacing:0}
   .collapse-btn{width:26px;height:26px;flex:0 0 auto;background:var(--surface);border:1px solid var(--line);
-    font-size:11px;transition:transform .12s}
+    font-size:11px;line-height:1;overflow:hidden;transition:transform .12s}
   .collapse-btn.open{transform:rotate(90deg)}
-  .icon-btn{width:34px;height:34px;background:var(--surface);border:1px solid var(--line);font-size:13px}
+  .icon-btn{width:34px;height:34px;background:var(--surface);border:1px solid var(--line);font-size:13px;line-height:1;overflow:hidden}
 
   .card{background:var(--surface);border:1px solid var(--line);margin-bottom:10px;overflow:hidden}
   .row{display:flex;align-items:center;gap:10px;padding:12px;border-bottom:1px solid var(--line)}
@@ -97,13 +97,15 @@
   .bar > i{display:block;height:100%;background:var(--teal)}
   .bar.over > i{background:var(--red)}
   .play{flex:0 0 auto;width:44px;height:44px;border:1px solid var(--line);
-    background:var(--surface2);font-size:14px;display:grid;place-items:center}
+    background:var(--surface2);font-size:14px;line-height:1;overflow:hidden;
+    display:flex;align-items:center;justify-content:center}
   .play.on{background:var(--amber);color:#1a1206;border-color:var(--amber)}
   .play[disabled]{opacity:.35}
-  .kebab{flex:0 0 auto;width:36px;height:44px;background:none;border:none;color:var(--muted);font-size:20px}
+  .kebab{flex:0 0 auto;width:36px;height:44px;background:none;border:none;color:var(--muted);font-size:20px;line-height:1;overflow:hidden}
   .tcaret{flex:0 0 auto;width:26px;height:26px;background:none;border:1px solid var(--line);
-    font-size:10px;transition:transform .12s}
+    font-size:10px;line-height:1;overflow:hidden;transition:transform .12s}
   .tcaret.open{transform:rotate(90deg)}
+  .tcaret-slot{flex:0 0 auto;width:26px}
 
   .empty{color:var(--muted);text-align:center;padding:44px 24px;font-size:15px;line-height:1.5}
   .empty b{color:var(--text)}
@@ -137,7 +139,7 @@
   .gbar > i.over{background:var(--red)}
   .gbar > i.rel{background:var(--teal);opacity:.55}
   .gcaret{flex:0 0 auto;width:20px;height:20px;background:none;border:1px solid var(--line);
-    font-size:9px;transition:transform .12s}
+    font-size:9px;line-height:1;overflow:hidden;transition:transform .12s}
   .gcaret.open{transform:rotate(90deg)}
   .glegend{font-size:11px;color:var(--muted);margin:0 2px 12px;line-height:1.5}
   .glegend b{color:var(--red)}
@@ -216,16 +218,18 @@
         <input id="newProjName" placeholder="Ex. Client X" autocomplete="off" />
       </div>
     </div>
-    <label for="editEst">Temps estimé (optionnel — 0 = aucun)</label>
-    <div class="est-row">
-      <input id="editEst" type="number" inputmode="numeric" min="0" value="0" />
-      <select id="editUnit" aria-label="Unité du temps estimé">
-        <option value="1" selected>minutes</option>
-        <option value="60">heures</option>
-        <option value="1440">jours</option>
-      </select>
+    <div id="editEstGroup">
+      <label for="editEst">Temps estimé (optionnel — 0 = aucun)</label>
+      <div class="est-row">
+        <input id="editEst" type="number" inputmode="numeric" min="0" value="0" />
+        <select id="editUnit" aria-label="Unité du temps estimé">
+          <option value="1" selected>minutes</option>
+          <option value="60">heures</option>
+          <option value="1440">jours</option>
+        </select>
+      </div>
     </div>
-    <div class="hint">Si le temps passé dépasse l'estimation, la ligne passe en rouge.</div>
+    <div class="hint" id="editHint">Si le temps passé dépasse l'estimation, la ligne passe en rouge.</div>
     <div class="actions">
       <button class="btn" id="editCancel">Annuler</button>
       <button class="btn primary" id="editSave">Enregistrer</button>
@@ -366,7 +370,10 @@ function elapsed(n){
   if(n.running && n.startedAt) e += (Date.now() - n.startedAt) / 1000;
   return e;
 }
-function over(n){ return n.estimate_min > 0 && elapsed(n) > n.estimate_min * 60; }
+// L'estimation d'une tâche-conteneur est la SOMME des estimations de ses
+// sous-tâches (comme son temps passé), et non une valeur propre figée.
+function estOf(n){ return hasSubs(n) ? n.subtasks.reduce((a,s) => a + (Number(s.estimate_min)||0), 0) : (n.estimate_min || 0); }
+function over(n){ const est = estOf(n); return est > 0 && elapsed(n) > est * 60; }
 function taskIsRunning(t){ return hasSubs(t) ? t.subtasks.some(s => s.running) : !!t.running; }
 function hms(s){
   s = Math.max(0, Math.floor(s));
@@ -470,7 +477,7 @@ function exportCsv(){
   foldRunning();
   const rows = [["Projet","Tache","Sous-tache","Estime (min)","Passe (s)","Passe","Terminee"]];
   for(const p of state.projects) for(const t of p.tasks){
-    rows.push([p.name, t.name, "", t.estimate_min, Math.round(elapsed(t)), hms(elapsed(t)), t.done ? "oui" : "non"]);
+    rows.push([p.name, t.name, "", estOf(t), Math.round(elapsed(t)), hms(elapsed(t)), t.done ? "oui" : "non"]);
     for(const sb of (t.subtasks||[]))
       rows.push([p.name, t.name, sb.name, sb.estimate_min, Math.round(elapsed(sb)), hms(elapsed(sb)), sb.done ? "oui" : "non"]);
   }
@@ -505,7 +512,7 @@ function buildRecap(){
     const tasks = [...g.p.tasks].sort((a,b) => elapsed(b) - elapsed(a));
     for(const t of tasks){
       let l = "  • " + t.name + " : " + disp(elapsed(t));
-      if(t.estimate_min > 0) l += " / " + disp(t.estimate_min*60) + (over(t) ? "  ⚠ DÉPASSÉ" : "");
+      if(estOf(t) > 0) l += " / " + disp(estOf(t)*60) + (over(t) ? "  ⚠ DÉPASSÉ" : "");
       if(t.done) l += " ✓";
       lines.push(l);
       for(const sb of (t.subtasks||[])){
@@ -548,6 +555,10 @@ function openEditSheet(opts){
   document.getElementById("newProjName").value = "";
   document.getElementById("editProjGroup").style.display = opts.showProject ? "" : "none";
   if(opts.showProject) fillProjSelect(opts.projectId || null);
+  document.getElementById("editEstGroup").style.display = opts.showEst === false ? "none" : "";
+  document.getElementById("editHint").textContent = opts.showEst === false
+    ? "Estimation calculée automatiquement : somme des sous-tâches. Modifie-la sur chaque sous-tâche."
+    : "Si le temps passé dépasse l'estimation, la ligne passe en rouge.";
   const b = bestUnit(opts.estMin || 0);
   document.getElementById("editEst").value = b.v;
   document.getElementById("editUnit").value = String(b.u);
@@ -568,8 +579,11 @@ function openEditNode(id){
     edit = {kind:"editsub", id};
     openEditSheet({title:"Modifier la sous-tâche", name:f.node.name, estMin:f.node.estimate_min, showProject:false});
   } else {
-    edit = {kind:"edit", id};
-    openEditSheet({title:"Modifier la tâche", name:f.node.name, estMin:f.node.estimate_min, showProject:true, projectId:f.p.id});
+    const container = hasSubs(f.node);
+    edit = {kind:"edit", id, isContainer: container};
+    openEditSheet({title:"Modifier la tâche", name:f.node.name,
+      estMin: container ? estOf(f.node) : f.node.estimate_min,
+      showProject:true, projectId:f.p.id, showEst: !container});
   }
 }
 function closeEdit(){ document.getElementById("editScrim").classList.remove("show"); edit = null; }
@@ -595,7 +609,8 @@ function commitEdit(){
     } else {
       const f = findNode(edit.id);
       if(f && !f.parent){
-        f.node.name = name; f.node.estimate_min = est;
+        f.node.name = name;
+        if(!edit.isContainer) f.node.estimate_min = est;
         if(f.p.id !== pid){ f.p.tasks = f.p.tasks.filter(t => t.id !== f.node.id); dest.tasks.push(f.node); }
       }
     }
@@ -663,13 +678,14 @@ function subRow(s, parentDone){
 function taskRow(t, activeOnly){
   const withSubs = hasSubs(t);
   const el = elapsed(t), ov = over(t);
-  const pct = t.estimate_min > 0 ? Math.min(100, (el/(t.estimate_min*60))*100) : 0;
+  const est = estOf(t);
+  const pct = est > 0 ? Math.min(100, (el/(est*60))*100) : 0;
   const running = taskIsRunning(t);
   const open = activeOnly ? true : !!openSub[t.id];
   const caret = withSubs
     ? `<button class="tcaret ${open?'open':''}" data-subcaret="${t.id}"
          aria-expanded="${open}" aria-label="${open?'Replier':'Déplier'} les sous-tâches de ${escapeHtml(t.name)}">▶</button>`
-    : '';
+    : `<span class="tcaret-slot" aria-hidden="true"></span>`;
   let html = `<div class="row ${running?'running':''} ${t.done?'done':''}">
     ${caret}
     <div class="meta">
@@ -677,14 +693,14 @@ function taskRow(t, activeOnly){
       <div class="time">
         ${running?'<span class="reclight" aria-hidden="true"></span>':''}
         <span class="val mono">${disp(el)}</span>
-        ${t.estimate_min>0?`<span class="mono">/ ${disp(t.estimate_min*60)}</span>`:''}
+        ${est>0?`<span class="mono">/ ${disp(est*60)}</span>`:''}
         ${ov?'<span class="over-flag">DÉPASSÉ</span>':''}
       </div>
-      ${t.estimate_min>0?`<div class="bar ${ov?'over':''}"><i style="width:${pct}%"></i></div>`:''}
+      ${est>0?`<div class="bar ${ov?'over':''}"><i style="width:${pct}%"></i></div>`:''}
     </div>
     <button class="play ${running?'on':''}" data-toggle="${t.id}" ${(t.done||withSubs)?'disabled':''}
       aria-label="${withSubs?'Groupe de tâches, ouvre pour démarrer une sous-tâche':(running?'Mettre en pause':'Démarrer')+' '+escapeHtml(t.name)}"
-      aria-pressed="${running}">${withSubs?'▤':(running?'❚❚':'▶')}</button>
+      aria-pressed="${running}">${withSubs?'':(running?'❚❚':'▶')}</button>
     <button class="kebab" data-menu="${t.id}" aria-label="Options pour ${escapeHtml(t.name)}">⋮</button>
   </div>`;
   if(withSubs && open){
@@ -719,7 +735,7 @@ function render(){
     // sous-tâches sans rien changer à la structure. Le détail par sous-tâche
     // n'apparaît que si on déplie volontairement une tâche.
     const groups = state.projects
-      .map(p => ({p, tot: projTotal(p), est: p.tasks.reduce((a,t) => a + t.estimate_min*60, 0)}))
+      .map(p => ({p, tot: projTotal(p), est: p.tasks.reduce((a,t) => a + estOf(t)*60, 0)}))
       .sort((a,b) => b.tot - a.tot);
     const grand = groups.reduce((a,g) => a + g.tot, 0);
     if(!groups.length || grand < 1){
@@ -754,7 +770,7 @@ function render(){
                 <span class="${dOver?'neg':'pos'}">${(g.tot>=g.est?'+':'-') + disp(Math.abs(g.tot-g.est))}</span></div>`
             : `<div class="gsub mono">pas d'estimation sur ce projet</div>`}
             ${tasks.length ? tasks.map(t => {
-              const el = elapsed(t);
+              const el = elapsed(t), est = estOf(t);
               const tOpen = onlyActive ? true : !!openSub[t.id];
               const tSubs = hasSubs(t) ? (onlyActive ? t.subtasks.filter(s => s.running) : t.subtasks) : [];
               const gcaret = hasSubs(t)
@@ -763,8 +779,8 @@ function render(){
                 : '';
               return `<div class="gtask ${t.done?'done':''}">
                 <div class="gline"><span class="tname">${gcaret}<span>${escapeHtml(t.name)}${t.done?' ✓':''}</span></span>
-                  <span class="ttime mono">${disp(el)}${t.estimate_min>0?` / ${disp(t.estimate_min*60)}`:''}${over(t)?` <span class="neg">+${disp(el-t.estimate_min*60)}</span>`:''}</span></div>
-                ${t.estimate_min > 0 ? budgetBar(el, t.estimate_min*60) : relBar(el, maxTask)}
+                  <span class="ttime mono">${disp(el)}${est>0?` / ${disp(est*60)}`:''}${over(t)?` <span class="neg">+${disp(el-est*60)}</span>`:''}</span></div>
+                ${est > 0 ? budgetBar(el, est*60) : relBar(el, maxTask)}
                 ${hasSubs(t) && tOpen ? tSubs.map(sb => {
                   const sel = elapsed(sb);
                   return `<div class="gtask gsubtask ${sb.done?'done':''}">
